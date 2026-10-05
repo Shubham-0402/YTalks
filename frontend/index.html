@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="description"
+      content="Ytalks — a unified multi-AI chat platform with cross-AI conversation continuity."
+    />
+    <title>Ytalks — Unified Multi-AI Chat</title>
+
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/ambient.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/layout.css" />
+  </head>
+
+  <body class="ambient-bg">
+    <a class="skip-link" href="#main-content">Skip to chat</a>
+
+    <!-- Decorative atmosphere behind the UI: base gradient, light sources,
+         hairline grid, grain and a vignette. Never interactive. -->
+    <div class="ambient" aria-hidden="true">
+      <span class="ambient__glow"></span>
+      <span class="ambient__grid"></span>
+      <span class="ambient__grain"></span>
+    </div>
+
+    <!-- Icon sprite (inline SVG, no external requests) -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
+          <path d="M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+          <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+        </symbol>
+        <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 12h13M12.5 6.5l6 5.5-6 5.5" />
+        </symbol>
+        <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9.5l6 6 6-6" />
+        </symbol>
+        <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9.5 6l6 6-6 6" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 12.5l5 5 10-11" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1V21a2 2 0 11-4 0v-.1A1.6 1.6 0 007 19.4a1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 002.8 14H2.7a2 2 0 110-4h.1A1.6 1.6 0 004.3 7a1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1A1.6 1.6 0 009 2.8V2.7a2 2 0 114 0v.1A1.6 1.6 0 0017 4.3a1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1A1.6 1.6 0 0021.2 9h.1a2 2 0 110 4h-.1a1.6 1.6 0 00-1.8 1.4z" />
+        </symbol>
+        <symbol id="i-log-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 17l5-5-5-5M20 12H9M12 3H6a2 2 0 00-2 2v14a2 2 0 002 2h6" />
+        </symbol>
+        <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0116 0" />
+        </symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 018 0v3" />
+        </symbol>
+        <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5l8.5 6 8.5-6" />
+        </symbol>
+        <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3h3l2 5-2.5 1.5a11 11 0 006 6L16 13l5 2v3a2 2 0 01-2.2 2A16 16 0 014 5.2 2 2 0 016 3z" />
+        </symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="2.6" />
+        </symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 11a8 8 0 10-1.2 5.3M20 5v6h-6" />
+        </symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+        </symbol>
+        <symbol id="i-rename" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4" />
+        </symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3.5L2.5 20h19L12 3.5zM12 10v4M12 17.2v.1" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.8v.1" />
+        </symbol>
+        <symbol id="i-arrows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h13l-3-3M20 16H7l3 3" />
+        </symbol>
+        <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
+        </symbol>
+        <symbol id="i-trash-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </symbol>
+        <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" />
+        </symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l8 3v6c0 4.5-3.2 7.9-8 9-4.8-1.1-8-4.5-8-9V6l8-3z" />
+        </symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5" />
+        </symbol>
+        <symbol id="i-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <div id="app">
+      <!-- ================================================================
+           AUTH SCREEN
+           ================================================================ -->
+      <section class="auth" id="auth-screen" aria-label="Authentication" hidden>
+        <div class="auth__aside">
+          <div>
+            <div class="brand">
+              <span class="brand__mark" aria-hidden="true">
+                <svg width="18" height="18"><use href="#i-sparkles" /></svg>
+              </span>
+              <span>
+                <span class="brand__name">Ytalks</span>
+                <span class="brand__sub" style="display: block">Multi-AI Platform</span>
+              </span>
+            </div>
+            <h1 class="auth__headline">
+              One conversation.<br /><em>Every AI you trust.</em>
+            </h1>
+            <p class="auth__lede">
+              Talk to OpenAI, Gemini, Claude and DeepSeek without ever losing
+              the thread. Ytalks carries your context across providers — you
+              own the history, the AI never does.
+            </p>
+
+            <ul class="auth__features">
+              <li class="auth__feature">
+                <span class="auth__feature-icon" aria-hidden="true">
+                  <svg width="18" height="18"><use href="#i-arrows" /></svg>
+                </span>
+                <span>
+                  <span class="auth__feature-title">Cross-AI continuity</span>
+                  <span class="auth__feature-text">
+                    Switch providers mid-conversation and pick up exactly where you left off.
+                  </span>
+                </span>
+              </li>
+              <li class="auth__feature">
+                <span class="auth__feature-icon" aria-hidden="true">
+                  <svg width="18" height="18"><use href="#i-database" /></svg>
+                </span>
+                <span>
+                  <span class="auth__feature-title">Your history stays yours</span>
+                  <span class="auth__feature-text">
+                    Every message is stored by the application, not locked inside a vendor.
+                  </span>
+                </span>
+              </li>
+              <li class="auth__feature">
+                <span class="auth__feature-icon" aria-hidden="true">
+                  <svg width="18" height="18"><use href="#i-shield" /></svg>
+                </span>
+                <span>
+                  <span class="auth__feature-title">Server-side credentials</span>
+                  <span class="auth__feature-text">
+                    Provider keys live on the backend only — never in browser JavaScript.
+                  </span>
+                </span>
+              </li>
+            </ul>
+          </div>
+          <p class="auth__aside-foot">
+            <span class="badge badge--demo">Demo build</span>
+            <span>Milestone 2 — mock chat, Spring Boot backend for health.</span>
+          </p>
+        </div>
+
+        <div class="auth__panel">
+          <div class="auth__brand">
+            <span class="brand__mark" aria-hidden="true">
+              <svg width="18" height="18"><use href="#i-sparkles" /></svg>
+            </span>
+            <span class="brand__name">Ytalks</span>
+          </div>
+
+          <div class="auth__card">
+            <!-- ---------- LOGIN ---------- -->
+            <form class="auth__card-body" id="login-form" novalidate hidden>
+              <h2 class="auth__title">Welcome back</h2>
+              <p class="auth__subtitle">Sign in to reach your conversations.</p>
+
+              <div class="auth__form">
+                <div class="field">
+                  <label class="field__label" for="login-email">Email address</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-mail" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="login-email"
+                      name="email"
+                      type="email"
+                      autocomplete="email"
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </div>
+                  <p class="field__error" hidden data-error-for="login-email"></p>
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="login-password">Password</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-lock" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="login-password"
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      class="icon-btn input-group__trailing"
+                      type="button"
+                      data-toggle-password="login-password"
+                      aria-label="Show password"
+                    >
+                      <svg width="16" height="16"><use href="#i-eye" /></svg>
+                    </button>
+                  </div>
+                  <p class="field__error" hidden data-error-for="login-password"></p>
+                </div>
+
+                <p class="field__error" hidden data-error-for="login-form">
+                  <svg width="14" height="14" aria-hidden="true"><use href="#i-alert" /></svg>
+                  <span></span>
+                </p>
+
+                <button class="btn btn--primary btn--lg btn--block" type="submit" data-submit-label="Signing in…">
+                  Sign in
+                </button>
+              </div>
+
+              <div class="auth__demo-fill">
+                <p class="auth__demo-title">
+                  <span class="badge badge--demo">Mock</span>
+                  Prototype login — no real authentication
+                </p>
+                <p class="field__hint">
+                  Use any email and a password of 8+ characters, or press the
+                  button below to fill demo credentials.
+                </p>
+                <button class="btn btn--secondary btn--sm" type="button" id="fill-demo-login">
+                  Fill demo credentials
+                </button>
+              </div>
+
+              <p class="auth__switch">
+                New to Ytalks?
+                <button class="link-btn" type="button" data-goto-auth="register">Create an account</button>
+              </p>
+            </form>
+
+            <!-- ---------- REGISTER ---------- -->
+            <form class="auth__card-body" id="register-form" novalidate hidden>
+              <h2 class="auth__title">Create your account</h2>
+              <p class="auth__subtitle">Takes about thirty seconds.</p>
+
+              <div class="auth__form">
+                <div class="field">
+                  <label class="field__label" for="register-name">Full name</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-user" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="register-name"
+                      name="name"
+                      type="text"
+                      autocomplete="name"
+                      placeholder="Aarav Sharma"
+                      required
+                      minlength="2"
+                    />
+                  </div>
+                  <p class="field__error" hidden data-error-for="register-name"></p>
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="register-email">Email address</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-mail" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="register-email"
+                      name="email"
+                      type="email"
+                      autocomplete="email"
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </div>
+                  <p class="field__error" hidden data-error-for="register-email"></p>
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="register-phone">Phone <span class="field__hint">(optional)</span></label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-phone" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="register-phone"
+                      name="phone"
+                      type="tel"
+                      autocomplete="tel"
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+                  <p class="field__error" hidden data-error-for="register-phone"></p>
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="register-password">Password</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-lock" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="register-password"
+                      name="password"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="At least 8 characters"
+                      required
+                      minlength="8"
+                    />
+                    <button
+                      class="icon-btn input-group__trailing"
+                      type="button"
+                      data-toggle-password="register-password"
+                      aria-label="Show password"
+                    >
+                      <svg width="16" height="16"><use href="#i-eye" /></svg>
+                    </button>
+                  </div>
+                  <div class="strength" aria-hidden="true">
+                    <span class="strength__bar" data-strength="1"></span>
+                    <span class="strength__bar" data-strength="2"></span>
+                    <span class="strength__bar" data-strength="3"></span>
+                    <span class="strength__bar" data-strength="4"></span>
+                  </div>
+                  <p class="strength__label" id="password-strength-label">Use 8+ characters with a number</p>
+                  <p class="field__error" hidden data-error-for="register-password"></p>
+                </div>
+
+                <p class="field__error" hidden data-error-for="register-form">
+                  <svg width="14" height="14" aria-hidden="true"><use href="#i-alert" /></svg>
+                  <span></span>
+                </p>
+
+                <button class="btn btn--primary btn--lg btn--block" type="submit" data-submit-label="Creating account…">
+                  Create account
+                </button>
+              </div>
+
+              <p class="auth__switch">
+                Already have an account?
+                <button class="link-btn" type="button" data-goto-auth="login">Sign in</button>
+              </p>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           APP SHELL
+           ================================================================ -->
+      <div class="shell" id="app-shell" hidden>
+        <!-- Mobile top bar -->
+        <header class="topbar">
+          <button class="icon-btn" id="open-sidebar" aria-label="Open conversation list" aria-expanded="false">
+            <svg width="20" height="20"><use href="#i-menu" /></svg>
+          </button>
+          <div class="brand" style="min-width: 0">
+            <span class="brand__mark" aria-hidden="true">
+              <svg width="16" height="16"><use href="#i-sparkles" /></svg>
+            </span>
+            <span class="brand__name truncate">Ytalks</span>
+          </div>
+          <button class="icon-btn" id="mobile-settings" aria-label="Open settings" style="margin-left: auto">
+            <svg width="20" height="20"><use href="#i-settings" /></svg>
+          </button>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar" aria-label="Conversations">
+          <div class="sidebar__head">
+            <div class="brand">
+              <span class="brand__mark" aria-hidden="true">
+                <svg width="18" height="18"><use href="#i-sparkles" /></svg>
+              </span>
+              <span>
+                <span class="brand__name">Ytalks</span>
+                <span class="brand__sub" style="display: block">Multi-AI</span>
+              </span>
+            </div>
+            <button
+              class="icon-btn"
+              id="collapse-sidebar"
+              style="margin-left: auto"
+              aria-label="Close conversation list"
+              data-close-sidebar
+            >
+              <svg width="18" height="18"><use href="#i-close" /></svg>
+            </button>
+          </div>
+
+          <div class="sidebar__actions">
+            <button class="btn btn--primary new-chat-btn" id="new-chat">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg>
+              <span>New chat</span>
+            </button>
+
+            <div class="search">
+              <span class="search__icon" aria-hidden="true">
+                <svg width="15" height="15"><use href="#i-search" /></svg>
+              </span>
+              <label class="visually-hidden" for="conversation-search">Search conversations</label>
+              <input
+                class="input"
+                id="conversation-search"
+                type="search"
+                placeholder="Search conversations"
+                autocomplete="off"
+              />
+              <span class="search__kbd" aria-hidden="true"><kbd>Ctrl K</kbd></span>
+            </div>
+          </div>
+
+          <nav class="conversations" id="conversation-list" aria-label="Conversation history"></nav>
+
+          <div class="sidebar__foot">
+            <button class="user-chip" id="user-chip" aria-haspopup="menu" aria-expanded="false">
+              <span class="avatar avatar--user avatar--md" id="user-avatar" aria-hidden="true">AS</span>
+              <span style="min-width: 0">
+                <span class="user-chip__name truncate" id="user-name" style="display: block">Aarav Sharma</span>
+                <span class="user-chip__mail truncate" id="user-email" style="display: block">aarav@example.com</span>
+              </span>
+            </button>
+            <button class="icon-btn" id="open-settings" aria-label="Settings" data-tooltip="Settings">
+              <svg width="18" height="18"><use href="#i-settings" /></svg>
+            </button>
+          </div>
+        </aside>
+
+        <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+
+        <!-- Main chat area -->
+        <main class="main" id="main-content" tabindex="-1">
+          <header class="chat-header">
+            <div class="chat-header__titles">
+              <h1 class="chat-header__title" id="chat-title">New conversation</h1>
+              <p class="chat-header__sub" id="chat-subtitle">
+                <span class="badge badge--demo">Mock data</span>
+                <span>Frontend prototype</span>
+                <span class="badge badge--backend" data-testid="backend-status" data-state="checking">Backend: checking…</span>
+              </p>
+            </div>
+
+            <div class="chat-header__actions">
+              <div class="provider-select" id="provider-select"></div>
+              <button class="icon-btn hide-sm" id="export-chat" aria-label="Export conversation" data-tooltip="Export">
+                <svg width="18" height="18"><use href="#i-download" /></svg>
+              </button>
+              <button class="icon-btn hide-sm" id="clear-chat" aria-label="Clear conversation" data-tooltip="Clear">
+                <svg width="18" height="18"><use href="#i-trash" /></svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions" tabindex="0">
+            <div class="messages__inner" id="messages-inner"></div>
+          </div>
+
+          <div class="composer-dock">
+            <form class="composer" id="composer">
+              <div class="composer__row">
+                <label class="visually-hidden" for="composer-input">Message</label>
+                <textarea
+                  class="composer__input"
+                  id="composer-input"
+                  rows="1"
+                  placeholder="Ask anything…"
+                  autocomplete="off"
+                ></textarea>
+                <button class="composer__send" id="send-btn" type="submit" aria-label="Send message" disabled>
+                  <svg width="18" height="18" aria-hidden="true"><use href="#i-send" /></svg>
+                </button>
+              </div>
+              <div class="composer__foot">
+                <span><kbd class="key-hint">Enter</kbd> to send · <kbd class="key-hint">Shift</kbd>+<kbd class="key-hint">Enter</kbd> for a new line</span>
+                <span class="badge badge--demo">Mock replies</span>
+              </div>
+            </form>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="dialog-root"></div>
+    <div class="toast-region" id="toast-root" role="status" aria-live="polite"></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

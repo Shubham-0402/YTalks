@@ -1,0 +1,95 @@
+/* ==========================================================================
+   Ambient background — cinematic depth behind the whole application.
+
+   One fixed, non-interactive stack of decorative layers sits behind #app:
+
+     .ambient            deep base gradient + inset vignette
+       .ambient__glow    four soft radial light sources (indigo / blue / cyan)
+       .ambient__grid    hairline grid, masked so it fades away from the centre
+       .ambient__grain   static film grain, kills gradient banding
+
+   Everything is a static paint except a single 64s transform drift on the glow
+   layer, which the compositor handles off the main thread. All colour values
+   come from tokens.css so the light theme gets its own, much quieter version.
+
+   Rules this layer must respect:
+     - never intercepts pointer events (the whole UI stays clickable)
+     - never sits above content (z-index 0, while #app is z-index 1)
+     - never competes with the text: the glows are strongest at the edges and
+       the vignette darkens the middle, which is where the message column sits
+   ========================================================================== */
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--ambient-base);
+  /* Inset shadow = a vignette that darkens the screen edges. */
+  box-shadow: inset 0 0 clamp(120px, 22vw, 320px) clamp(20px, 4vw, 60px)
+    var(--ambient-vignette);
+}
+
+.ambient__glow {
+  position: absolute;
+  /* Oversized so the drift never exposes an edge. */
+  inset: -18%;
+  background-image:
+    radial-gradient(58% 48% at 14% 6%, var(--ambient-violet) 0%, transparent 68%),
+    radial-gradient(52% 44% at 86% 4%, var(--ambient-blue) 0%, transparent 66%),
+    radial-gradient(62% 52% at 80% 96%, var(--ambient-cyan) 0%, transparent 70%),
+    radial-gradient(50% 42% at 24% 94%, var(--ambient-indigo) 0%, transparent 68%);
+  animation: ambient-drift 64s var(--ease-in-out) infinite alternate;
+  will-change: transform;
+}
+
+.ambient__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  opacity: var(--grid-opacity);
+  /* Fade the grid towards the edges so it reads as atmosphere, not a table. */
+  mask-image: radial-gradient(115% 85% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.4) 42%, transparent 76%);
+  -webkit-mask-image: radial-gradient(
+    115% 85% at 50% 0%,
+    #000 0%,
+    rgba(0, 0, 0, 0.4) 42%,
+    transparent 76%
+  );
+}
+
+.ambient__grain {
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-image);
+  background-size: 180px 180px;
+  opacity: var(--grain-opacity);
+}
+
+@keyframes ambient-drift {
+  from {
+    transform: translate3d(-1.5%, -1%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(1.5%, 1.5%, 0) scale(1.06);
+  }
+}
+
+/* A still, equally atmospheric background when the viewer asks for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ambient__glow {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+/* Very small screens: fewer, tighter light sources so the UI keeps its space. */
+@media (max-width: 640px) {
+  .ambient__grid {
+    background-size: calc(var(--grid-size) * 0.75) calc(var(--grid-size) * 0.75);
+  }
+}

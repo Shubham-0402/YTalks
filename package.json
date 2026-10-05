@@ -1,0 +1,17 @@
+{
+  "name": "ytalks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unified Multi-AI Chat Platform — Milestone 1 frontend prototype (mock data only)",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "serve": "node tools/serve.js",
+    "test": "node tests/ui-smoke.mjs",
+    "test:ui": "node tests/ui-smoke.mjs",
+    "test:m2": "node tests/m2-smoke.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}
