@@ -3,9 +3,10 @@
 A multi-AI chat workspace: hold one conversation and move it between OpenAI, Google Gemini,
 Anthropic Claude and DeepSeek without losing the thread.
 
-**Status: Milestone 2 complete.** The frontend prototype (Milestone 1) runs on mock data,
-plus a Spring Boot REST foundation (`/api/health`) that the frontend polls for a
-connection status badge. No database, authentication or real provider calls exist yet.
+**Status: Milestone 3 complete.** The frontend prototype (Milestone 1) runs on mock data,
+plus a Spring Boot REST foundation with MySQL/JPA persistence (Milestone 3). The backend
+provides REST endpoints for conversations, messages, and AI providers. No authentication
+or real provider calls exist yet.
 
 ## Run it
 
@@ -17,18 +18,23 @@ npm start       # http://localhost:4173/
 `npm start` runs a zero-dependency static file server (`tools/serve.js`). Pass a port to override it:
 `node tools/serve.js 8080`.
 
-### Backend (Milestone 2)
+### Backend (Milestone 3)
+
+**Prerequisites:**
+- MySQL 8.0+ running on localhost:3306 (or configure via environment variables)
+- Database `ytalks` will be created automatically
+- Root user with password `change_me` (change in production!)
 
 ```bash
 cd backend
-./mvnw package          # builds target/ytalks-backend-0.2.0.jar (17 tests)
+./mvnw package          # builds target/ytalks-backend-0.3.0.jar (17 tests)
 ./mvnw spring-boot:run  # http://localhost:8080/api/health
 ```
 
 `mvnw`/`mvnw.cmd` are the Maven Wrapper — no Maven installation is required (Java 17+ is).
 Configuration lives in `backend/src/main/resources/application.yml`; every setting has a
 default and can be overridden with an environment variable (`YTALKS_PORT`,
-`YTALKS_CORS_ALLOWED_ORIGINS`, …) — see `backend/.env.example`.
+`YTALKS_CORS_ALLOWED_ORIGINS`, `YTALKS_DB_HOST`, `YTALKS_DB_PASSWORD`, …) — see `backend/.env.example`.
 
 The frontend badge in the chat header polls `GET /api/health` every 30s and shows
 **connected** or **offline** accordingly. To point the frontend at a different backend:
@@ -81,6 +87,82 @@ that produced them, never a per-provider copy.
 | **Start new chat**     | A new, empty conversation opens on the new provider. The previous conversation is left exactly as it was. |
 | **Cancel**             | Nothing changes — you stay on the original provider.                                |
 
+## Milestone 3 — MySQL Database + JPA Persistence
+
+### Database schema
+
+The following tables are created automatically by Hibernate (`ddl-auto: update`):
+
+- **users** — application users (prepared for Milestone 4 authentication)
+  - `id` (BIGINT, PK), `name` (VARCHAR), `email` (VARCHAR, UNIQUE), `phone` (VARCHAR),
+  - `password_hash` (VARCHAR, not used yet), `created_at`, `updated_at`
+
+- **ai_providers** — known AI providers (seeded at startup)
+  - `id` (BIGINT, PK), `provider_name` (VARCHAR, UNIQUE), `provider_type` (VARCHAR),
+  - `enabled` (BOOLEAN), `created_at`, `updated_at`
+  - Seeded records: OpenAI, Google Gemini, Anthropic Claude, DeepSeek
+
+- **conversations** — user conversations
+  - `id` (BIGINT, PK), `user_id` (FK → users), `title` (VARCHAR),
+  - `provider_id` (VARCHAR), `model` (VARCHAR), `created_at`, `updated_at`
+
+- **messages** — messages within conversations
+  - `id` (BIGINT, PK), `conversation_id` (FK → conversations), `sender_type` (ENUM: USER, ASSISTANT, SYSTEM),
+  - `content` (TEXT), `provider_id` (VARCHAR), `model` (VARCHAR), `created_at`
+
+- **conversation_providers** — join table tracking which providers participated in a conversation
+  - `id` (BIGINT, PK), `conversation_id` (FK), `provider_id` (FK → ai_providers),
+  - `first_used_at`, `message_count`
+  - Unique constraint on (conversation_id, provider_id)
+
+### New REST endpoints (for persistence verification)
+
+All endpoints require `X-User-Id` header (temporary dev mechanism; replaced by auth in Milestone 4).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/providers` | List enabled AI providers |
+| GET | `/api/conversations` | List conversations (paginated) |
+| POST | `/api/conversations` | Create conversation |
+| GET | `/api/conversations/{id}` | Get conversation with messages |
+| PATCH | `/api/conversations/{id}` | Update title/provider/model |
+| DELETE | `/api/conversations/{id}` | Delete conversation |
+| POST | `/api/conversations/{id}/clear` | Clear messages, keep conversation |
+| GET | `/api/conversations/{id}/messages` | List messages (paginated) |
+| POST | `/api/conversations/{id}/messages` | Add message (USER, ASSISTANT, or SYSTEM) |
+
+### Database configuration
+
+Configure via environment variables (see `backend/.env.example`):
+
+```
+YTALKS_DB_HOST=localhost
+YTALKS_DB_PORT=3306
+YTALKS_DB_NAME=ytalks
+YTALKS_DB_USERNAME=root
+YTALKS_DB_PASSWORD=change_me
+```
+
+### MySQL setup (Windows)
+
+```powershell
+# Install via winget
+winget install -e --id Oracle.MySQL --accept-source-agreements --accept-package-agreements
+
+# Initialize data directory (run as Administrator or use custom datadir)
+mkdir C:\mysql-data
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --initialize-insecure --datadir=C:\mysql-data
+
+# Start server
+Start-Process "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" -ArgumentList "--datadir=C:\mysql-data", "--console"
+
+# Set root password
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'change_me'; FLUSH PRIVILEGES;"
+
+# Create database (done automatically by app, but can be done manually)
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -u root -pchange_me -e "CREATE DATABASE IF NOT EXISTS ytalks;"
+```
+
 ## Test
 
 ```bash
@@ -123,17 +205,28 @@ frontend/
   js/views/               auth, sidebar, chat, handoff-dialog, settings
   js/app.js               bootstrap, render subscriptions, shortcuts, test surface
 tools/serve.js            static server
-backend/                  Spring Boot REST foundation (see README section above)
+backend/
+  src/main/java/com/ytalks/backend/
+    config/               CORS, request context, data initializer
+    controller/           Health, Conversation, AiProvider endpoints
+    dto/                  JSON request/response records
+    entity/               JPA entities (User, Conversation, Message, AiProvider, ConversationProvider)
+    exception/            Global error handling, API exceptions
+    repository/           Spring Data JPA repositories
+    service/              Business logic (User, Conversation, AiProvider services)
 tests/                    smoke tests, console diagnostic, generated screenshots
 ```
 
 State flows one way: a view calls an action → the action updates the store → the store notifies →
 the view re-renders. `window.__ytalks` exposes the store, actions and selectors for the tests.
 
-## Not in this milestone
+## Not in this milestone (yet)
 
-No MySQL schema, no real authentication or API keys, no real streaming API, no cross-AI
-backend logic. The mock AI's replies, latency and failures are simulated in
-`frontend/js/mock-ai.js`; the real integration points arrive with the backend milestone.
-The backend (`backend/`) is deliberately thin: one health endpoint, CORS configuration,
-a JSON error envelope and structured logging — the layers later milestones build on.
+- ❌ Real authentication (login, registration, OTP, JWT) — Milestone 4
+- ❌ Real AI provider integration (OpenAI, Gemini, Claude, DeepSeek APIs) — Milestone 6
+- ❌ API keys/secrets management — later milestone
+- ❌ Cross-AI context transfer backend logic — later milestone
+- ❌ Image generation, payments, production deployment
+
+The mock AI's replies, latency and failures are simulated in
+`frontend/js/mock-ai.js`; the real integration points arrive with later milestones.

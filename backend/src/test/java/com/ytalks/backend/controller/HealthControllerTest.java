@@ -34,7 +34,7 @@ class HealthControllerTest {
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.status", is("UP")))
                 .andExpect(jsonPath("$.service", is("Ytalks backend")))
-                .andExpect(jsonPath("$.version", is("0.2.0")))
+                .andExpect(jsonPath("$.version", is("0.3.0")))
                 .andExpect(jsonPath("$.environment", is("default")))
                 .andExpect(jsonPath("$.serverTime", matchesPattern(".+")))
                 .andExpect(jsonPath("$.responseTimeMs", greaterThanOrEqualTo(0)))

@@ -8,6 +8,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import com.ytalks.backend.dto.HealthResponse;
+import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Builds the health payload.
@@ -21,10 +22,14 @@ public class HealthService {
 
     private final Environment environment;
     private final String version;
+    private final EntityManagerFactory entityManagerFactory;
 
-    public HealthService(Environment environment, @Value("${app.version:0.0.0}") String version) {
+    public HealthService(Environment environment,
+                         @Value("${app.version:0.0.0}") String version,
+                         EntityManagerFactory entityManagerFactory) {
         this.environment = environment;
         this.version = version;
+        this.entityManagerFactory = entityManagerFactory;
     }
 
     /**
@@ -41,10 +46,21 @@ public class HealthService {
                 activeProfile(),
                 List.of(
                         new HealthResponse.Check("api", "UP", "REST endpoints are served"),
-                        new HealthResponse.Check("persistence", "NOT_CONFIGURED",
-                                "no database is configured in this milestone")),
+                        persistenceCheck()),
                 Instant.now(),
                 elapsedMillis(startedAt));
+    }
+
+    private HealthResponse.Check persistenceCheck() {
+        if (entityManagerFactory == null || !entityManagerFactory.isOpen()) {
+            return new HealthResponse.Check("persistence", "DOWN", "EntityManagerFactory not available");
+        }
+        try (var em = entityManagerFactory.createEntityManager()) {
+            em.createNativeQuery("SELECT 1").getSingleResult();
+            return new HealthResponse.Check("persistence", "UP", "MySQL connection OK");
+        } catch (Exception e) {
+            return new HealthResponse.Check("persistence", "DOWN", "Database connection failed: " + e.getMessage());
+        }
     }
 
     private String activeProfile() {

@@ -16,9 +16,33 @@ spring:
     virtual:
       enabled: true
 
+# ---- Datasource / JPA (Milestone 3) --------------------------------------
+# All values can be overridden with environment variables, e.g.
+#   YTALKS_DB_HOST=mysql.example.com
+#   YTALKS_DB_PASSWORD=secret
+# See backend/.env.example for the full list.
+  datasource:
+    url: jdbc:mysql://${YTALKS_DB_HOST:localhost}:${YTALKS_DB_PORT:3306}/${YTALKS_DB_NAME:ytalks}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${YTALKS_DB_USERNAME:root}
+    password: ${YTALKS_DB_PASSWORD:change_me}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
 # Version reported by /api/health; kept in step with the pom version.
 app:
-  version: 0.2.0
+  version: 0.3.0
 
 # ---- Cross-origin access --------------------------------------------------
 # Overridable without a rebuild, e.g.
@@ -34,5 +58,6 @@ logging:
   level:
     root: INFO
     com.ytalks.backend: ${YTALKS_LOG_LEVEL:INFO}
+    org.hibernate.SQL: ${YTALKS_HIBERNATE_SQL_LOG:WARN}
   pattern:
     console: "%d{HH:mm:ss.SSS} %-5level [%X{requestId:-no-request}] %logger{36} - %msg%n"
