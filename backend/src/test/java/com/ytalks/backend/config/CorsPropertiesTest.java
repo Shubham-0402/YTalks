@@ -21,8 +21,8 @@ class CorsPropertiesTest {
     }
 
     @Test
-    @DisplayName("credentials stay off unless explicitly enabled")
-    void credentialsAreOptIn() {
-        assertThat(corsProperties.allowCredentials()).isFalse();
+    @DisplayName("credentials are enabled for authentication")
+    void credentialsAreEnabled() {
+        assertThat(corsProperties.allowCredentials()).isTrue();
     }
 }

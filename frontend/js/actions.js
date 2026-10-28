@@ -19,6 +19,25 @@ import { DEMO_CREDENTIALS } from './mock-data.js';
 import { requestCompletion, MockProviderError } from './mock-ai.js';
 import { showToast } from './ui.js';
 import { uid, truncate } from './utils.js';
+import {
+  login as apiLogin,
+  register as apiRegister,
+  registerAndVerify as apiRegisterAndVerify,
+  resendOtp as apiResendOtp,
+  logout as apiLogout,
+  getCurrentUser as apiGetCurrentUser,
+  fetchConversations as apiFetchConversations,
+  createConversation as apiCreateConversation,
+  fetchConversation as apiFetchConversation,
+  updateConversation as apiUpdateConversation,
+  deleteConversation as apiDeleteConversation,
+  clearConversation as apiClearConversation,
+  fetchMessages as apiFetchMessages,
+  addMessage as apiAddMessage,
+  setAuthToken,
+  clearAuthToken,
+  isAuthenticated,
+} from './backend.js';
 
 let activeController = null; // AbortController for the in-flight mock request
 
@@ -26,69 +45,195 @@ let activeController = null; // AbortController for the in-flight mock request
 /* Session                                                             */
 /* ------------------------------------------------------------------ */
 
-export function login({ email, password }) {
-  return new Promise((resolve, reject) => {
-    // Simulated network delay so the loading state is visible in the demo.
-    setTimeout(() => {
-      const known = email.trim().toLowerCase() === DEMO_CREDENTIALS.email;
-      if (known && password !== DEMO_CREDENTIALS.password) {
-        reject(new Error('That password does not match our records.'));
-        return;
-      }
-      if (!known && password.length < 8) {
-        reject(new Error('Password must be at least 8 characters.'));
-        return;
-      }
+export async function login({ email, password }) {
+  const response = await apiLogin(email, password);
+  setAuthToken(response.accessToken);
 
-      commit((s) => ({
-        ...s,
-        session: {
-          isAuthenticated: true,
-          user: {
-            id: 'usr_demo_001',
-            name: known ? 'Aarav Sharma' : email.split('@')[0].replace(/[._-]+/g, ' '),
-            email: email.trim(),
-            phone: '+91 98765 43210',
-            plan: 'Free demo',
-          },
-        },
-        activeConversationId:
-          s.activeConversationId && s.conversations.some((c) => c.id === s.activeConversationId)
-            ? s.activeConversationId
-            : s.conversations[0]?.id || null,
-      }));
-      resolve(getState().session.user);
-    }, 650);
-  });
+  const user = {
+    id: response.user.id,
+    name: response.user.name,
+    email: response.user.email,
+    phone: response.user.phone,
+    plan: 'Free demo',
+  };
+
+  // Fetch user's conversations from backend
+  const conversationsResponse = await fetchConversationsFromBackend();
+  const bestConv = selectBestConversation(conversationsResponse);
+
+  commit((s) => ({
+    ...s,
+    session: {
+      isAuthenticated: true,
+      user,
+    },
+    conversations: conversationsResponse,
+    activeConversationId: bestConv?.id || conversationsResponse[0]?.id || null,
+  }));
+
+  showToast({ type: 'success', title: `Welcome back, ${user.name.split(' ')[0]}`, message: 'Signed in successfully.' });
+  return user;
 }
 
-export function register({ name, email, phone }) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      commit((s) => ({
-        ...s,
-        session: {
-          isAuthenticated: true,
-          user: {
-            id: uid('usr'),
-            name: name.trim(),
-            email: email.trim(),
-            phone: phone?.trim() || null,
-            plan: 'Free demo',
-          },
-        },
-        // A brand-new account starts with an empty history.
-        conversations: [],
-        activeConversationId: null,
-      }));
-      resolve(getState().session.user);
-    }, 750);
-  });
+export async function register({ name, email, phone, password }) {
+  // First step: initiate registration (sends OTP)
+  await apiRegister(name, email, phone, password);
+
+  // Return the email so the UI can show the OTP verification screen
+  return { email, name, phone, password };
 }
 
-export function logout() {
+export async function verifyOtpAndRegister({ name, email, phone, password, code }) {
+  const response = await apiRegisterAndVerify(name, email, phone, password, code);
+  setAuthToken(response.accessToken);
+
+  const user = {
+    id: response.user.id,
+    name: response.user.name,
+    email: response.user.email,
+    phone: response.user.phone,
+    plan: 'Free demo',
+  };
+
+  // New user starts with empty conversations
+  commit((s) => ({
+    ...s,
+    session: {
+      isAuthenticated: true,
+      user,
+    },
+    conversations: [],
+    activeConversationId: null,
+  }));
+
+  showToast({
+    type: 'success',
+    title: `Account created for ${user.name.split(' ')[0]}`,
+    message: 'You are now signed in.',
+  });
+  return user;
+}
+
+export async function resendOtp(email) {
+  await apiResendOtp(email);
+  showToast({ type: 'info', title: 'OTP resent', message: 'A new verification code has been sent.' });
+}
+
+export async function logout() {
   stopResponding();
+  await apiLogout();
+  clearAuthToken();
   commit((s) => ({ ...s, session: { isAuthenticated: false, user: null } }));
+  showToast({ type: 'info', title: 'Signed out', message: 'You have been logged out.' });
+}
+
+export async function restoreSession() {
+  if (!isAuthenticated()) {
+    return false;
+  }
+  try {
+    const userResponse = await apiGetCurrentUser();
+    const user = {
+      id: userResponse.id,
+      name: userResponse.name,
+      email: userResponse.email,
+      phone: userResponse.phone,
+      plan: 'Free demo',
+    };
+
+    const conversationsResponse = await fetchConversationsFromBackend();
+    const bestConv = selectBestConversation(conversationsResponse);
+
+    commit((s) => ({
+      ...s,
+      session: {
+        isAuthenticated: true,
+        user,
+      },
+      conversations: conversationsResponse,
+      activeConversationId: bestConv?.id || conversationsResponse[0]?.id || null,
+    }));
+    return true;
+  } catch (error) {
+    // Token invalid or expired
+    clearAuthToken();
+    commit((s) => ({ ...s, session: { isAuthenticated: false, user: null } }));
+    return false;
+  }
+}
+
+async function fetchConversationsFromBackend() {
+  try {
+    const response = await apiFetchConversations(0, 50);
+    const conversations = response.map(conv => ({
+      id: String(conv.id),
+      title: conv.title,
+      createdAt: new Date(conv.createdAt).getTime(),
+      updatedAt: new Date(conv.updatedAt).getTime(),
+      providerId: conv.providerId,
+      model: conv.model,
+      messages: [], // List endpoint doesn't include messages
+    }));
+
+    // Find the best conversation to load messages for
+    const bestConv = selectBestConversation(conversations);
+    if (bestConv) {
+      try {
+        const detail = await apiFetchConversation(bestConv.id);
+        const messages = detail.messages?.map(msg => {
+          const senderType = msg.senderType.toLowerCase();
+          // Detect handoff messages (SYSTEM type with handoff content)
+          const isHandoff = msg.senderType === 'SYSTEM' && msg.content?.includes('Context transferred');
+          return {
+            id: String(msg.id),
+            type: isHandoff ? 'handoff' : senderType,
+            content: msg.content,
+            createdAt: new Date(msg.createdAt).getTime(),
+            providerId: msg.providerId,
+            model: msg.model,
+          };
+        }) || [];
+        
+        // Update the best conversation with messages
+        const idx = conversations.findIndex(c => c.id === bestConv.id);
+        if (idx >= 0) {
+          conversations[idx] = { ...bestConv, messages };
+        }
+      } catch (error) {
+        console.error('Failed to fetch best conversation detail:', error);
+      }
+    }
+
+    return conversations;
+  } catch (error) {
+    console.error('Failed to fetch conversations:', error);
+    return [];
+  }
+}
+
+/**
+ * Selects the best conversation to activate on session restore.
+ * Prefers the seeded "Java concurrency questions" conversation, 
+ * falls back to the conversation with the most messages, 
+ * then falls back to the first conversation.
+ */
+function selectBestConversation(conversations) {
+  if (!conversations || conversations.length === 0) return null;
+  
+  // Prefer the seeded "Java concurrency questions" conversation
+  const seededConv = conversations.find(c => c.title === 'Java concurrency questions');
+  if (seededConv) return seededConv;
+  
+  // Fall back to conversation with most messages
+  const withMessages = conversations.filter(c => c.messages && c.messages.length > 0);
+  if (withMessages.length > 0) {
+    return withMessages.reduce((a, b) => 
+      (b.messages?.length || 0) > (a.messages?.length || 0) ? b : a
+    );
+  }
+  
+  // Fall back to first conversation
+  return conversations[0];
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,12 +280,14 @@ function newConversation({ providerId, model, title = 'New conversation' }) {
   };
 }
 
-export function createConversation(providerId = getState().activeProviderId) {
+export async function createConversation(providerId = getState().activeProviderId) {
   const provider = selectProvider(providerId);
   const conversation = newConversation({
     providerId,
     model: provider?.defaultModel || provider?.models?.[0] || 'default',
   });
+
+  // Optimistically add to local store
   commit((s) => ({
     ...s,
     conversations: [conversation, ...s.conversations],
@@ -148,18 +295,80 @@ export function createConversation(providerId = getState().activeProviderId) {
     activeProviderId: providerId,
     ui: { ...s.ui, sidebarOpen: false },
   }));
+
+  // Persist to backend
+  try {
+    const backendConv = await apiCreateConversation(conversation.title, providerId, conversation.model);
+    // Replace the optimistic conversation with the backend version (which has a real ID)
+    // Also update activeConversationId to the new backend ID
+    commit((s) => ({
+      ...s,
+      activeConversationId: String(backendConv.id),
+      conversations: s.conversations.map((c) =>
+        c.id === conversation.id ? { ...c, id: String(backendConv.id), createdAt: new Date(backendConv.createdAt).getTime(), updatedAt: new Date(backendConv.updatedAt).getTime() } : c
+      ),
+    }));
+  } catch (error) {
+    console.error('Failed to create conversation on backend:', error);
+    // Keep the optimistic conversation if backend fails
+  }
+
   return conversation;
 }
 
 export function selectConversation(id) {
   const conversation = getState().conversations.find((c) => c.id === id);
   if (!conversation) return;
-  commit((s) => ({
-    ...s,
-    activeConversationId: id,
-    activeProviderId: conversation.providerId,
-    ui: { ...s.ui, sidebarOpen: false },
-  }));
+  
+  // If the conversation already has messages loaded, just select it
+  if (conversation.messages && conversation.messages.length > 0) {
+    commit((s) => ({
+      ...s,
+      activeConversationId: id,
+      activeProviderId: conversation.providerId,
+      ui: { ...s.ui, sidebarOpen: false },
+    }));
+    return;
+  }
+  
+  // Otherwise, fetch the conversation detail with messages from the backend
+  (async () => {
+    try {
+      const detail = await apiFetchConversation(id);
+      const messages = detail.messages?.map(msg => {
+        const senderType = msg.senderType.toLowerCase();
+        // Detect handoff messages (SYSTEM type with handoff content)
+        const isHandoff = msg.senderType === 'SYSTEM' && msg.content?.includes('Context transferred');
+        return {
+          id: String(msg.id),
+          type: isHandoff ? 'handoff' : senderType,
+          content: msg.content,
+          createdAt: new Date(msg.createdAt).getTime(),
+          providerId: msg.providerId,
+          model: msg.model,
+        };
+      }) || [];
+      
+      commit((s) => ({
+        ...s,
+        conversations: s.conversations.map((c) =>
+          c.id === id ? { ...c, messages } : c
+        ),
+        activeConversationId: id,
+        activeProviderId: detail.providerId,
+        ui: { ...s.ui, sidebarOpen: false },
+      }));
+    } catch (error) {
+      console.error('Failed to fetch conversation detail:', error);
+      // Fallback: just select the conversation without messages
+      commit((s) => ({
+        ...s,
+        activeConversationId: id,
+        activeProviderId: conversation.providerId,
+        ui: { ...s.ui, sidebarOpen: false },
+      }));
+    }
+  })();
 }
 
 export function renameConversation(id, title) {
@@ -271,7 +480,7 @@ export function applyProviderSelection(targetProviderId) {
  * YES path: continue THIS conversation on the new provider.
  * The previous messages are untouched; we only record the transition.
  */
-export function continueConversationWithProvider(targetProviderId) {
+export async function continueConversationWithProvider(targetProviderId) {
   const state = getState();
   const conversation = selectActiveConversation(state);
   const target = selectProvider(targetProviderId, state);
@@ -291,6 +500,7 @@ export function continueConversationWithProvider(targetProviderId) {
     toProviderId: target.id,
     toModel: target.defaultModel,
     messageCount: transferable.length,
+    content: `Context transferred from ${from?.name || 'previous provider'} → ${target.name}, ${transferable.length} messages transferred`,
   };
 
   const updated = {
@@ -306,6 +516,15 @@ export function continueConversationWithProvider(targetProviderId) {
     activeProviderId: target.id,
     conversations: s.conversations.map((c) => (c.id === conversation.id ? updated : c)),
   }));
+
+  // Persist handoff message to backend
+  try {
+    await apiAddMessage(conversation.id, 'SYSTEM', handoff.content || `Context transferred from ${from?.name || 'previous provider'} → ${target.name}, ${transferable.length} messages transferred`, null, null);
+    // Also update conversation provider/model on backend
+    await apiUpdateConversation(conversation.id, conversation.title, target.id, target.defaultModel);
+  } catch (error) {
+    console.error('Failed to persist handoff to backend:', error);
+  }
 
   showToast({
     type: 'success',

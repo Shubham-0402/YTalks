@@ -361,7 +361,9 @@ function openProviderMenu(anchor, activeProvider) {
  * explicit and readable rather than hidden in a generic helper.
  */
 function requestProviderSwitch(targetProviderId, closeMenu) {
+  console.log('[requestProviderSwitch] targetProviderId:', targetProviderId);
   const plan = planProviderSwitch(targetProviderId);
+  console.log('[requestProviderSwitch] plan:', plan);
   closeMenu?.();
 
   if (plan.type === 'error') {

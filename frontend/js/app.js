@@ -9,7 +9,7 @@
  */
 
 import { qs } from './utils.js';
-import { getState, subscribe } from './store.js';
+import { getState, subscribe, restoreSessionIfNeeded } from './store.js';
 import * as actions from './actions.js';
 import { setSidebarOpen, setTheme } from './actions.js';
 import { initAuthScreen, showScreen, renderAuthScreen } from './views/auth.js';
@@ -138,9 +138,12 @@ function initBackendStatus() {
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
 
-function boot() {
+async function boot() {
   const state = getState();
   document.documentElement.dataset.theme = state.settings.theme;
+
+  // Restore session from JWT token if present
+  await restoreSessionIfNeeded();
 
   initAuthScreen();
   initSidebar();
@@ -150,12 +153,12 @@ function boot() {
   initBackendStatus();
 
   subscribe(render);
-  render(state);
+  render(getState());
 
   // A small, deliberate testing surface. The Milestone 1 smoke test drives the
   // app through this object instead of poking at private internals.
   window.__ytalks = {
-    version: 'milestone-2',
+    version: 'milestone-4',
     store: { getState, subscribe },
     actions,
     chat: chatInternals(),

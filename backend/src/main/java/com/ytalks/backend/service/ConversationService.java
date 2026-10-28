@@ -81,6 +81,23 @@ public class ConversationService {
     }
 
     /**
+     * Creates a new conversation for a user with custom timestamps.
+     * Used for seeding demo data.
+     */
+    @Transactional
+    public Conversation createConversation(User user, String title, String providerId, String model,
+                                           Instant createdAt, Instant updatedAt) {
+        Conversation conversation = new Conversation();
+        conversation.setUser(user);
+        conversation.setTitle(title);
+        conversation.setProviderId(providerId);
+        conversation.setModel(model);
+        conversation.setCreatedAt(createdAt);
+        conversation.setUpdatedAt(updatedAt);
+        return conversationRepository.save(conversation);
+    }
+
+    /**
      * Updates a conversation's title.
      */
     @Transactional
@@ -88,6 +105,7 @@ public class ConversationService {
         Conversation conversation = conversationRepository.findByIdAndUser(conversationId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
         conversation.setTitle(title);
+        conversation.touch();
         return conversationRepository.save(conversation);
     }
 
@@ -106,6 +124,7 @@ public class ConversationService {
             recordProviderUsage(conversation, providerId);
         }
         
+        conversation.touch();
         return conversationRepository.save(conversation);
     }
 
@@ -128,6 +147,7 @@ public class ConversationService {
                 .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
         conversation.getMessages().clear();
         conversation.setTitle("New conversation");
+        conversation.touch();
         return conversationRepository.save(conversation);
     }
 
@@ -154,11 +174,27 @@ public class ConversationService {
      */
     @Transactional
     public Message addUserMessage(Conversation conversation, String content) {
+        return addUserMessage(conversation, content, Instant.now());
+    }
+
+    /**
+     * Adds a user message to a conversation with a custom timestamp.
+     * Used for seeding demo data.
+     */
+    @Transactional
+    public Message addUserMessage(Conversation conversation, String content, Instant createdAt) {
         Message message = new Message();
         message.setConversation(conversation);
         message.setSenderType(SenderType.USER);
         message.setContent(content);
-        return messageRepository.save(message);
+        message.setCreatedAt(createdAt);
+        Message saved = messageRepository.save(message);
+        
+        // Update conversation's updatedAt to reflect new message
+        conversation.setUpdatedAt(createdAt);
+        conversationRepository.save(conversation);
+        
+        return saved;
     }
 
     /**
@@ -166,14 +202,28 @@ public class ConversationService {
      */
     @Transactional
     public Message addAssistantMessage(Conversation conversation, String content, String providerId, String model) {
+        return addAssistantMessage(conversation, content, providerId, model, Instant.now());
+    }
+
+    /**
+     * Adds an assistant message to a conversation with a custom timestamp.
+     * Used for seeding demo data.
+     */
+    @Transactional
+    public Message addAssistantMessage(Conversation conversation, String content, String providerId, String model, Instant createdAt) {
         Message message = new Message();
         message.setConversation(conversation);
         message.setSenderType(SenderType.ASSISTANT);
         message.setContent(content);
         message.setProviderId(providerId);
         message.setModel(model);
+        message.setCreatedAt(createdAt);
         
         Message saved = messageRepository.save(message);
+        
+        // Update conversation's updatedAt to reflect new message
+        conversation.setUpdatedAt(createdAt);
+        conversationRepository.save(conversation);
         
         // Record provider usage
         if (providerId != null) {
@@ -188,11 +238,27 @@ public class ConversationService {
      */
     @Transactional
     public Message addSystemMessage(Conversation conversation, String content) {
+        return addSystemMessage(conversation, content, Instant.now());
+    }
+
+    /**
+     * Adds a system message (e.g., handoff divider) to a conversation with a custom timestamp.
+     * Used for seeding demo data.
+     */
+    @Transactional
+    public Message addSystemMessage(Conversation conversation, String content, Instant createdAt) {
         Message message = new Message();
         message.setConversation(conversation);
         message.setSenderType(SenderType.SYSTEM);
         message.setContent(content);
-        return messageRepository.save(message);
+        message.setCreatedAt(createdAt);
+        Message saved = messageRepository.save(message);
+        
+        // Update conversation's updatedAt to reflect new message
+        conversation.setUpdatedAt(createdAt);
+        conversationRepository.save(conversation);
+        
+        return saved;
     }
 
     /**
@@ -212,7 +278,7 @@ public class ConversationService {
      */
     @Transactional
     public void recordProviderUsage(Conversation conversation, String providerId) {
-        AiProvider provider = aiProviderRepository.findByProviderNameIgnoreCase(providerId)
+        AiProvider provider = aiProviderRepository.findByProviderTypeIgnoreCase(providerId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown provider: " + providerId));
         
         Optional<ConversationProvider> existing = conversationProviderRepository

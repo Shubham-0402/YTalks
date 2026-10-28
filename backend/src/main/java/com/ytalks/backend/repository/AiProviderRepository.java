@@ -19,6 +19,11 @@ public interface AiProviderRepository extends JpaRepository<AiProvider, Long> {
     Optional<AiProvider> findByProviderNameIgnoreCase(String providerName);
 
     /**
+     * Finds a provider by its type (case-insensitive).
+     */
+    Optional<AiProvider> findByProviderTypeIgnoreCase(String providerType);
+
+    /**
      * Finds all enabled providers.
      */
     List<AiProvider> findByEnabledTrue();

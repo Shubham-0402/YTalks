@@ -13,7 +13,7 @@
 
   <groupId>com.ytalks</groupId>
   <artifactId>ytalks-backend</artifactId>
-  <version>0.2.0</version>
+  <version>0.4.0</version>
   <name>Ytalks Backend</name>
   <description>Ytalks application layer: REST/JSON foundation for the multi-AI chat platform.</description>
 
@@ -50,6 +50,11 @@
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
@@ -59,6 +64,32 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-webmvc-test</artifactId>
       <scope>test</scope>
+    </dependency>
+
+    <!-- JWT support -->
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+      <version>0.12.5</version>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+      <version>0.12.5</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+      <version>0.12.5</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- Google Gen AI SDK for Gemini (Milestone 5) -->
+    <dependency>
+      <groupId>com.google.genai</groupId>
+      <artifactId>google-genai</artifactId>
+      <version>0.3.0</version>
     </dependency>
   </dependencies>
 

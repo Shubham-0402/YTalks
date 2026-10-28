@@ -12,6 +12,7 @@
  */
 
 import { PROVIDERS, DEMO_USER, buildSeedConversations } from './mock-data.js';
+import { isAuthenticated } from './backend.js';
 
 const STORAGE_KEY = 'ytalks.milestone1.v1';
 const SCHEMA_VERSION = 1;
@@ -38,9 +39,9 @@ function createInitialState() {
       searchQuery: '',
     },
     providers: PROVIDERS,
-    activeProviderId: 'openai',
-    conversations: buildSeedConversations(),
-    activeConversationId: 'conv_java_threads',
+    activeProviderId: 'gemini',
+    conversations: [],
+    activeConversationId: null,
   };
 }
 
@@ -73,6 +74,48 @@ function restore() {
 }
 
 restore();
+
+/* ------------------------------------------------------------------ */
+/* Session restoration                                                 */
+/* ------------------------------------------------------------------ */
+
+let sessionRestored = false;
+
+/**
+ * Attempts to restore the session from a stored JWT token.
+ * Should be called once during app initialization.
+ */
+export async function restoreSessionIfNeeded() {
+  if (sessionRestored) return;
+  sessionRestored = true;
+
+  if (isAuthenticated()) {
+    // Import dynamically to avoid circular dependency
+    const { restoreSession } = await import('./actions.js');
+    await restoreSession();
+    // Clear stale localStorage conversations since backend is now source of truth
+    clearStaleConversations();
+  }
+}
+
+/**
+ * Clears stale conversation data from localStorage.
+ * Backend is now the source of truth for conversations.
+ */
+function clearStaleConversations() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved.conversations && saved.conversations.length > 0) {
+        saved.conversations = [];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+      }
+    }
+  } catch (error) {
+    console.warn('[store] could not clear stale conversations:', error.message);
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Read / write                                                        */

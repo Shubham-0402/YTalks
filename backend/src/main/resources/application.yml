@@ -42,16 +42,30 @@ spring:
 
 # Version reported by /api/health; kept in step with the pom version.
 app:
-  version: 0.3.0
+  version: 0.4.0
 
-# ---- Cross-origin access --------------------------------------------------
-# Overridable without a rebuild, e.g.
-#   YTALKS_CORS_ALLOWED_ORIGINS=https://app.example.com
-# Port 4173 is the dev server; 4319 is the UI smoke-test server.
+# ---- JWT Authentication (Milestone 4) ------------------------------------
+# Override with environment variables in production!
 ytalks:
+  jwt:
+    secret: ${YTALKS_JWT_SECRET:change-me-in-production-use-a-long-random-string-at-least-32-chars}
+    expiration-ms: ${YTALKS_JWT_EXPIRATION_MS:86400000}  # 24 hours
+
+  # OTP Configuration
+  otp:
+    dev-mode: ${YTALKS_OTP_DEV_MODE:true}
+    email:
+      enabled: ${YTALKS_OTP_EMAIL_ENABLED:false}
+
+  # Gemini AI Provider (Milestone 5)
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    timeout-ms: ${GEMINI_TIMEOUT_MS:30000}
+
   cors:
-    allowed-origins: ${YTALKS_CORS_ALLOWED_ORIGINS:http://localhost:4173,http://127.0.0.1:4173,http://localhost:4319,http://127.0.0.1:4319}
-    allow-credentials: ${YTALKS_CORS_ALLOW_CREDENTIALS:false}
+    allowed-origins: ${YTALKS_CORS_ALLOWED_ORIGINS:http://localhost:4173,http://127.0.0.1:4173,http://localhost:4319,http://127.0.0.1:4319,http://localhost:4321,http://127.0.0.1:4321}
+    allow-credentials: ${YTALKS_CORS_ALLOW_CREDENTIALS:true}
 
 # ---- Logging --------------------------------------------------------------
 logging:
@@ -59,5 +73,6 @@ logging:
     root: INFO
     com.ytalks.backend: ${YTALKS_LOG_LEVEL:INFO}
     org.hibernate.SQL: ${YTALKS_HIBERNATE_SQL_LOG:WARN}
+    org.springframework.security: ${YTALKS_SECURITY_LOG_LEVEL:INFO}
   pattern:
     console: "%d{HH:mm:ss.SSS} %-5level [%X{requestId:-no-request}] %logger{36} - %msg%n"

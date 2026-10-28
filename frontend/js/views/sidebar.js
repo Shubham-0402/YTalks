@@ -247,7 +247,9 @@ function openConversationMenu(anchor, conversationId) {
 /* ------------------------------------------------------------------ */
 
 export function initSidebar() {
-  qs('#new-chat').addEventListener('click', () => createConversation());
+  qs('#new-chat').addEventListener('click', async () => {
+    await createConversation();
+  });
 
   qs('#conversation-search').addEventListener('input', (event) =>
     setSearchQuery(event.target.value)

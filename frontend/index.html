@@ -395,6 +395,55 @@
                 <button class="link-btn" type="button" data-goto-auth="login">Sign in</button>
               </p>
             </form>
+
+            <!-- ---------- VERIFY OTP ---------- -->
+            <form class="auth__card-body" id="verify-otp-form" novalidate hidden>
+              <h2 class="auth__title">Verify your email</h2>
+              <p class="auth__subtitle">We sent a 6-digit code to <span id="otp-email-display"></span></p>
+
+              <div class="auth__form">
+                <div class="field">
+                  <label class="field__label" for="otp-code">Verification code</label>
+                  <div class="input-group">
+                    <span class="input-group__icon" aria-hidden="true">
+                      <svg width="16" height="16"><use href="#i-shield" /></svg>
+                    </span>
+                    <input
+                      class="input"
+                      id="otp-code"
+                      name="code"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      placeholder="123456"
+                      required
+                      minlength="6"
+                      maxlength="6"
+                    />
+                  </div>
+                  <p class="field__error" hidden data-error-for="otp-code"></p>
+                </div>
+
+                <p class="field__error" hidden data-error-for="verify-otp-form">
+                  <svg width="14" height="14" aria-hidden="true"><use href="#i-alert" /></svg>
+                  <span></span>
+                </p>
+
+                <button class="btn btn--primary btn--lg btn--block" type="submit" data-submit-label="Verifying…">
+                  Verify & create account
+                </button>
+              </div>
+
+              <p class="auth__resend">
+                Didn't receive the code?
+                <button class="link-btn" type="button" id="resend-otp">Resend code</button>
+                <span id="otp-countdown" class="otp-countdown" hidden></span>
+              </p>
+
+              <p class="auth__switch">
+                <button class="link-btn" type="button" data-goto-auth="register">Back to registration</button>
+              </p>
+            </form>
           </div>
         </div>
       </section>

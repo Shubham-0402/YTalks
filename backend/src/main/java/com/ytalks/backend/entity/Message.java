@@ -45,7 +45,9 @@ public class Message {
 
     @PrePersist
     void onCreate() {
-        this.createdAt = Instant.now();
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
+        }
     }
 
     public Long getId() {

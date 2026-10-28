@@ -6,8 +6,8 @@ import com.ytalks.backend.entity.Message;
 import com.ytalks.backend.entity.SenderType;
 import com.ytalks.backend.entity.User;
 import com.ytalks.backend.exception.ResourceNotFoundException;
+import com.ytalks.backend.security.UserPrincipal;
 import com.ytalks.backend.service.ConversationService;
-import com.ytalks.backend.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -17,22 +17,17 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * REST endpoints for conversation and message persistence (Milestone 3).
+ * REST endpoints for conversation and message persistence.
  * <p>
- * These endpoints exist to verify database persistence works. They use a
- * development-only mechanism for user identification (header-based) since
- * authentication is not implemented until Milestone 4.
- * <p>
- * In production, these endpoints would be protected by Spring Security and
- * the user would be obtained from the authentication context.
+ * All endpoints are protected by JWT authentication.
+ * The authenticated user is obtained from the security context.
  */
 @RestController
 @RequestMapping("/api/conversations")
@@ -41,34 +36,13 @@ public class ConversationController {
     private static final Logger log = LoggerFactory.getLogger(ConversationController.class);
 
     private final ConversationService conversationService;
-    private final UserService userService;
 
-    public ConversationController(ConversationService conversationService, UserService userService) {
+    public ConversationController(ConversationService conversationService) {
         this.conversationService = conversationService;
-        this.userService = userService;
     }
 
-    /**
-     * Development helper: resolves the current user from the {@code X-User-Id} header.
-     * Returns a default test user if no header is present (for easy testing).
-     * <p>
-     * THIS IS A TEMPORARY MECHANISM FOR MILESTONE 3 TESTING ONLY.
-     * Authentication will replace this in Milestone 4.
-     */
-    private User resolveCurrentUser(@RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        Long userId;
-        if (userIdHeader != null && !userIdHeader.isBlank()) {
-            try {
-                userId = Long.parseLong(userIdHeader);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid X-User-Id header: must be a number");
-            }
-        } else {
-            // Default to user ID 1 for testing convenience
-            userId = 1L;
-        }
-        return userService.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+    private User getCurrentUser(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return userPrincipal.getUser();
     }
 
     /* ------------------------------------------------------------------ */
@@ -77,11 +51,11 @@ public class ConversationController {
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<ConversationSummary>> listConversations(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
         Page<Conversation> conversationsPage = conversationService.findByUser(user, pageable);
 
@@ -94,10 +68,10 @@ public class ConversationController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ConversationSummary> createConversation(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestBody CreateConversationRequest request) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
 
         String title = (request.title() != null && !request.title().isBlank())
                 ? request.title()
@@ -115,10 +89,10 @@ public class ConversationController {
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ConversationDetail> getConversation(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Conversation conversation = conversationService.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", id.toString()));
 
@@ -140,11 +114,11 @@ public class ConversationController {
 
     @PatchMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ConversationSummary> updateConversation(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id,
             @RequestBody UpdateConversationRequest request) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Conversation conversation = conversationService.updateProvider(id, user,
                 request.providerId(), request.model());
 
@@ -157,20 +131,20 @@ public class ConversationController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteConversation(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         conversationService.deleteConversation(id, user);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(value = "/{id}/clear", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ConversationSummary> clearConversation(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Conversation conversation = conversationService.clearConversation(id, user);
         return ResponseEntity.ok(toSummary(conversation));
     }
@@ -181,12 +155,12 @@ public class ConversationController {
 
     @GetMapping(value = "/{id}/messages", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<MessageSummary>> getMessages(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Conversation conversation = conversationService.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", id.toString()));
 
@@ -202,11 +176,11 @@ public class ConversationController {
 
     @PostMapping(value = "/{id}/messages", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<MessageSummary> addMessage(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long id,
             @RequestBody AddMessageRequest request) {
 
-        User user = resolveCurrentUser(userIdHeader);
+        User user = getCurrentUser(userPrincipal);
         Conversation conversation = conversationService.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", id.toString()));
 
