@@ -6,15 +6,20 @@ import com.ytalks.backend.dto.RegisterRequest;
 import com.ytalks.backend.dto.ResendOtpRequest;
 import com.ytalks.backend.dto.UserSummary;
 import com.ytalks.backend.dto.VerifyOtpRequest;
+import com.ytalks.backend.exception.AuthException;
 import com.ytalks.backend.security.UserPrincipal;
 import com.ytalks.backend.service.AuthService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -39,8 +44,8 @@ public class AuthController {
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         String otp = authService.initiateRegistration(request);
-        // In dev mode, we return the OTP for testing; in production this would be null
-        return ResponseEntity.ok(new AuthResponse(null, 0, null));
+        // In dev mode, otp is non-null for local testing; in production it is null and omitted from JSON
+        return ResponseEntity.ok(new AuthResponse(null, 0, null, otp));
     }
 
     /**
@@ -76,9 +81,9 @@ public class AuthController {
      * Resends an OTP code for registration.
      */
     @PostMapping(value = "/resend-otp", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Void> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
-        authService.resendOtp(request.email());
-        return ResponseEntity.ok().build();
+    public ResponseEntity<AuthResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        String otp = authService.resendOtp(request.email());
+        return ResponseEntity.ok(new AuthResponse(null, 0, null, otp));
     }
 
     /**
@@ -93,9 +98,13 @@ public class AuthController {
 
     /**
      * Gets the current authenticated user's profile.
+     * Supports both GET and POST for client compatibility.
      */
-    @PostMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
+    @RequestMapping(value = "/me", method = {RequestMethod.GET, RequestMethod.POST}, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UserSummary> me(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        if (userPrincipal == null || userPrincipal.getId() == null) {
+            throw AuthException.tokenMissing();
+        }
         UserSummary user = authService.getCurrentUser(userPrincipal.getId());
         return ResponseEntity.ok(user);
     }
@@ -116,10 +125,10 @@ public class AuthController {
      * Combined registration + OTP request for simpler frontend flow.
      */
     public record RegisterWithOtpRequest(
-            String name,
-            String email,
-            String phone,
-            String password,
-            String code
+            @NotBlank @Size(min = 2, max = 120) String name,
+            @NotBlank @Email @Size(max = 255) String email,
+            @Size(max = 30) String phone,
+            @NotBlank @Size(min = 8, max = 128) String password,
+            @NotBlank @Size(min = 6, max = 6) String code
     ) {}
 }

@@ -128,7 +128,7 @@ public class GeminiService {
             return responseText.trim();
 
         } catch (Exception e) {
-            log.error("Gemini API call failed: {}", e.getMessage(), e);
+            log.error("Gemini API call failed: {}", sanitizeMessage(e.getMessage()));
             throw parseGeminiException(e);
         }
     }
@@ -204,11 +204,13 @@ public class GeminiService {
             return (RuntimeException) e;
         }
 
-        String msg = e.getMessage() != null ? e.getMessage() : e.toString();
+        String rawMsg = e.getMessage() != null ? e.getMessage() : e.toString();
+        String msg = sanitizeMessage(rawMsg);
         String lower = msg.toLowerCase();
 
-        if (lower.contains("api_key") || lower.contains("apikey") || lower.contains("unauthenticated")
-                || lower.contains("401") || lower.contains("invalid authentication") || lower.contains("permission_denied")) {
+        if (lower.contains("api_key") || lower.contains("apikey") || lower.contains("api key")
+                || lower.contains("unauthenticated") || lower.contains("401") || lower.contains("403")
+                || lower.contains("invalid authentication") || lower.contains("permission_denied")) {
             return new GeminiAuthException("Gemini API authentication failed: invalid or unauthorized GEMINI_API_KEY", e);
         }
         if (lower.contains("quota") || lower.contains("rate limit") || lower.contains("429")
@@ -222,6 +224,23 @@ public class GeminiService {
             return new GeminiServiceException("Gemini model not found: " + properties.getModel(), e);
         }
 
+        if (lower.contains("503") || lower.contains("unavailable") || lower.contains("overloaded")) {
+            return new GeminiServiceException("Gemini is temporarily unavailable (503). Please retry shortly.", e);
+        }
+
         return new GeminiServiceException("Gemini API error: " + msg, e);
+    }
+
+    private String sanitizeMessage(String msg) {
+        if (msg == null) {
+            return "Unknown Gemini API error";
+        }
+        String sanitized = msg;
+        String apiKey = properties.getApiKey();
+        if (apiKey != null && !apiKey.isBlank()) {
+            sanitized = sanitized.replace(apiKey, "[REDACTED]");
+        }
+        sanitized = sanitized.replaceAll("([?&]key=)[^&\\s]+", "$1[REDACTED]");
+        return sanitized;
     }
 }

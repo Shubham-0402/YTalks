@@ -77,10 +77,14 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
-            MissingServletRequestParameterException.class, ConstraintViolationException.class})
+            MissingServletRequestParameterException.class, ConstraintViolationException.class,
+            IllegalArgumentException.class})
     ResponseEntity<ApiErrorResponse> handleBadRequest(Exception ex, HttpServletRequest request) {
         log.warn("Malformed request on {}: {}", request.getRequestURI(), ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "The request could not be read or parsed", request);
+        String msg = ex instanceof IllegalArgumentException && ex.getMessage() != null
+                ? ex.getMessage()
+                : "The request could not be read or parsed";
+        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST", msg, request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

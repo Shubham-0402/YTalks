@@ -9,6 +9,8 @@ import com.ytalks.backend.entity.User;
 import com.ytalks.backend.exception.GeminiAuthException;
 import com.ytalks.backend.exception.GeminiNotConfiguredException;
 import com.ytalks.backend.exception.GeminiRateLimitException;
+import com.ytalks.backend.exception.GeminiServiceException;
+import com.ytalks.backend.exception.GeminiTimeoutException;
 import com.ytalks.backend.security.JwtService;
 import com.ytalks.backend.service.ConversationService;
 import com.ytalks.backend.service.GeminiService;
@@ -266,5 +268,43 @@ class ChatControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code", is("GEMINI_AUTH_FAILED")));
+    }
+
+    @Test
+    @DisplayName("POST /api/chat/{id}/messages handles Gemini timeout with 504 GATEWAY_TIMEOUT response")
+    void handlesGeminiTimeout() throws Exception {
+        when(conversationService.findByIdAndUser(eq(10L), any(User.class)))
+                .thenReturn(Optional.of(testConversation));
+        when(geminiService.isConfigured()).thenReturn(true);
+        when(geminiService.getModel()).thenReturn("gemini-1.5-flash");
+        when(conversationService.findMessages(testConversation)).thenReturn(new ArrayList<>());
+        when(geminiService.sendMessage(anyList())).thenThrow(new GeminiTimeoutException("Gemini API request timed out."));
+
+        ChatRequest request = new ChatRequest("Test prompt", "gemini", "gemini-1.5-flash");
+        mockMvc.perform(post("/api/chat/10/messages")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isGatewayTimeout())
+                .andExpect(jsonPath("$.code", is("GEMINI_TIMEOUT")));
+    }
+
+    @Test
+    @DisplayName("POST /api/chat/{id}/messages handles upstream Gemini error with 502 BAD_GATEWAY response")
+    void handlesGeminiServiceError() throws Exception {
+        when(conversationService.findByIdAndUser(eq(10L), any(User.class)))
+                .thenReturn(Optional.of(testConversation));
+        when(geminiService.isConfigured()).thenReturn(true);
+        when(geminiService.getModel()).thenReturn("gemini-1.5-flash");
+        when(conversationService.findMessages(testConversation)).thenReturn(new ArrayList<>());
+        when(geminiService.sendMessage(anyList())).thenThrow(new GeminiServiceException("Gemini API error: upstream failure"));
+
+        ChatRequest request = new ChatRequest("Test prompt", "gemini", "gemini-1.5-flash");
+        mockMvc.perform(post("/api/chat/10/messages")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code", is("GEMINI_ERROR")));
     }
 }

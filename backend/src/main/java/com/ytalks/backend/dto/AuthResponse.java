@@ -11,6 +11,10 @@ import java.time.Instant;
 public record AuthResponse(
         String accessToken,
         long expiresInMs,
-        UserSummary user
+        UserSummary user,
+        String devOtp
 ) {
+    public AuthResponse(String accessToken, long expiresInMs, UserSummary user) {
+        this(accessToken, expiresInMs, user, null);
+    }
 }

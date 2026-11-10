@@ -17,9 +17,10 @@ import java.util.List;
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
     /**
-     * Finds all messages for a conversation, ordered by creation time ascending.
+     * Finds all messages for a conversation, ordered by creation time ascending (with ID tie-breaker).
      */
-    List<Message> findByConversationOrderByCreatedAtAsc(Conversation conversation);
+    @Query("SELECT m FROM Message m WHERE m.conversation = :conversation ORDER BY m.createdAt ASC, m.id ASC")
+    List<Message> findByConversationOrderByCreatedAtAsc(@org.springframework.data.repository.query.Param("conversation") Conversation conversation);
 
     /**
      * Finds all messages for a conversation with pagination.

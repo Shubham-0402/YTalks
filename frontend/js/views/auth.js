@@ -283,11 +283,10 @@ export function initAuthScreen() {
     setBusy(loginForm, true, loginForm.querySelector('button[type="submit"]').dataset.submitLabel);
 
     try {
-      const user = await login({
+      await login({
         email: loginForm.elements.email.value,
         password: loginForm.elements.password.value,
       });
-      showToast({ type: 'success', title: `Welcome back, ${user.name.split(' ')[0]}`, message: 'Signed in successfully.' });
       loginForm.reset();
     } catch (error) {
       setFormError(loginForm, error.message || 'Sign in failed. Please try again.');

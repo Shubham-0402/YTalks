@@ -9,6 +9,7 @@ const DEFAULT_BASE = 'http://localhost:8080';
 const STORAGE_KEY_BASE = 'ytalks.backendBase';
 const STORAGE_KEY_TOKEN = 'ytalks.authToken';
 const REQUEST_TIMEOUT_MS = 10000;
+const CHAT_TIMEOUT_MS = 90000; // Exceeds backend GEMINI_TIMEOUT_MS (30000ms)
 
 /**
  * Returns the configured backend base URL.
@@ -90,15 +91,33 @@ function authHeaders(extra = {}) {
 }
 
 /**
- * Generic API request helper with timeout and error handling.
+ * Generic API request helper with timeout, external AbortSignal, and error handling.
  */
 async function apiRequest(path, options = {}) {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, signal: externalSignal, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timer);
+      const cancelErr = new Error('Request cancelled.');
+      cancelErr.name = 'AbortError';
+      cancelErr.kind = 'cancelled';
+      throw cancelErr;
+    }
+    externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+
   try {
     const response = await fetch(`${backendBaseUrl()}${path}`, {
-      ...options,
-      headers: authHeaders(options.headers),
+      ...fetchOptions,
+      headers: authHeaders(fetchOptions.headers),
       signal: controller.signal,
     });
     const contentType = response.headers.get('content-type') || '';
@@ -113,12 +132,24 @@ async function apiRequest(path, options = {}) {
     }
     return body;
   } catch (error) {
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('Request timed out');
+    if (externalSignal?.aborted && !timedOut) {
+      const cancelErr = new Error('Request cancelled.');
+      cancelErr.name = 'AbortError';
+      cancelErr.kind = 'cancelled';
+      throw cancelErr;
+    }
+    if (timedOut || error.name === 'AbortError' || error.name === 'TimeoutError') {
+      const timeoutErr = new Error('Request timed out');
+      timeoutErr.code = 'GEMINI_TIMEOUT';
+      timeoutErr.kind = 'timeout';
+      throw timeoutErr;
     }
     throw error;
   } finally {
     clearTimeout(timer);
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }
   }
 }
 
@@ -196,6 +227,10 @@ export async function logout() {
 /* Providers                                                          */
 /* ------------------------------------------------------------------ */
 
+export async function fetchChatProviders() {
+  return apiRequest('/api/chat/providers', { method: 'GET' });
+}
+
 export async function fetchProviders() {
   return apiRequest('/api/providers', { method: 'GET' });
 }
@@ -245,9 +280,11 @@ export async function addMessage(conversationId, senderType, content, providerId
   });
 }
 
-export async function sendChatMessage(conversationId, message, providerId, model) {
+export async function sendChatMessage(conversationId, message, providerId, model, { timeoutMs = CHAT_TIMEOUT_MS, signal } = {}) {
   return apiRequest(`/api/chat/${conversationId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ message, providerId, model }),
+    timeoutMs,
+    signal,
   });
 }

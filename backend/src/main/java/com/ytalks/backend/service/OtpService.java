@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static com.ytalks.backend.exception.AuthException.invalidOtp;
@@ -86,13 +87,26 @@ public class OtpService {
     /**
      * Verifies an OTP code for the given email.
      * Returns true if valid, throws AuthException if invalid/expired/max attempts.
+     * Uses noRollbackFor on AuthException so failed attempt increments are committed.
      */
+    @Transactional(noRollbackFor = AuthException.class)
     public boolean verifyOtp(String email, String code) {
         Optional<OtpCode> otpOpt = otpRepository.findLatestValidByEmail(email.toLowerCase(), Instant.now());
 
         if (otpOpt.isEmpty()) {
-            throw new com.ytalks.backend.exception.AuthException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "INVALID_OTP", "Invalid or expired OTP code");
+            // Check if an expired or already-used OTP exists to return the most specific error
+            List<OtpCode> allForEmail = otpRepository.findByEmailOrderByCreatedAtDesc(email.toLowerCase());
+            if (!allForEmail.isEmpty()) {
+                OtpCode latest = allForEmail.get(0);
+                if (latest.isVerified()) {
+                    throw new AuthException(
+                            org.springframework.http.HttpStatus.BAD_REQUEST, "OTP_ALREADY_USED", "This OTP has already been used");
+                }
+                if (latest.isExpired()) {
+                    throw otpExpired();
+                }
+            }
+            throw invalidOtp();
         }
 
         OtpCode otp = otpOpt.get();
@@ -111,15 +125,18 @@ public class OtpService {
         }
 
         otp.incrementAttempts();
-        otpRepository.save(otp);
+        otpRepository.saveAndFlush(otp);
 
         if (!passwordEncoder.matches(code, otp.getOtpHash())) {
+            if (otp.getAttempts() >= MAX_ATTEMPTS) {
+                throw otpMaxAttempts();
+            }
             throw invalidOtp();
         }
 
         // Mark as verified
         otp.setVerified(true);
-        otpRepository.save(otp);
+        otpRepository.saveAndFlush(otp);
 
         return true;
     }

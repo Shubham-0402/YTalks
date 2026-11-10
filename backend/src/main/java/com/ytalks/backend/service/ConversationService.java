@@ -6,12 +6,12 @@ import com.ytalks.backend.entity.User;
 import com.ytalks.backend.entity.AiProvider;
 import com.ytalks.backend.entity.ConversationProvider;
 import com.ytalks.backend.entity.SenderType;
+import com.ytalks.backend.exception.ResourceNotFoundException;
 import com.ytalks.backend.repository.ConversationRepository;
 import com.ytalks.backend.repository.MessageRepository;
 import com.ytalks.backend.repository.AiProviderRepository;
 import com.ytalks.backend.repository.ConversationProviderRepository;
 import org.springframework.data.domain.Page;
-import com.ytalks.backend.repository.ConversationProviderRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,7 +103,7 @@ public class ConversationService {
     @Transactional
     public Conversation updateTitle(Long conversationId, User user, String title) {
         Conversation conversation = conversationRepository.findByIdAndUser(conversationId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId.toString()));
         conversation.setTitle(title);
         conversation.touch();
         return conversationRepository.save(conversation);
@@ -115,7 +115,7 @@ public class ConversationService {
     @Transactional
     public Conversation updateProvider(Long conversationId, User user, String providerId, String model) {
         Conversation conversation = conversationRepository.findByIdAndUser(conversationId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId.toString()));
         conversation.setProviderId(providerId);
         conversation.setModel(model);
         
@@ -134,7 +134,7 @@ public class ConversationService {
     @Transactional
     public void deleteConversation(Long conversationId, User user) {
         Conversation conversation = conversationRepository.findByIdAndUser(conversationId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId.toString()));
         conversationRepository.delete(conversation);
     }
 
@@ -144,7 +144,7 @@ public class ConversationService {
     @Transactional
     public Conversation clearConversation(Long conversationId, User user) {
         Conversation conversation = conversationRepository.findByIdAndUser(conversationId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId.toString()));
         conversation.getMessages().clear();
         conversation.setTitle("New conversation");
         conversation.touch();

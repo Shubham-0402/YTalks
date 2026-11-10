@@ -27,11 +27,12 @@ function createInitialState() {
     },
     settings: {
       theme: 'dark',
-      /** Base simulated reply latency in ms. */
+      /** Base simulated reply latency in ms (only used when useMockAi is true). */
       mockLatencyMs: 900,
       /** 'none' | 'rate_limit' | 'timeout' | 'network' | 'invalid' */
       mockErrorMode: 'none',
       streamTokens: true,
+      useMockAi: false,
     },
     ui: {
       authView: 'login',
@@ -54,7 +55,7 @@ const listeners = new Set();
 
 function persist() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, conversations: [] }));
   } catch (error) {
     // Private-mode browsers and full quotas should never break the demo.
     console.warn('[store] could not persist state:', error.message);
@@ -67,7 +68,21 @@ function restore() {
     if (!raw) return;
     const saved = JSON.parse(raw);
     if (saved.version !== SCHEMA_VERSION) return; // ignore stale formats
-    state = { ...createInitialState(), ...saved, ui: createInitialState().ui };
+    const hasToken = isAuthenticated();
+    state = {
+      ...createInitialState(),
+      ...saved,
+      settings: {
+        ...createInitialState().settings,
+        ...(saved.settings || {}),
+        useMockAi: false,
+        mockErrorMode: 'none',
+      },
+      session: hasToken ? saved.session || createInitialState().session : createInitialState().session,
+      conversations: [],
+      activeConversationId: hasToken ? saved.activeConversationId || null : null,
+      ui: createInitialState().ui,
+    };
   } catch (error) {
     console.warn('[store] ignoring unreadable saved state:', error.message);
   }

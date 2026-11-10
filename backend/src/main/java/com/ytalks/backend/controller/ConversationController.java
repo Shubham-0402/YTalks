@@ -5,6 +5,7 @@ import com.ytalks.backend.entity.Conversation;
 import com.ytalks.backend.entity.Message;
 import com.ytalks.backend.entity.SenderType;
 import com.ytalks.backend.entity.User;
+import com.ytalks.backend.exception.ApiException;
 import com.ytalks.backend.exception.ResourceNotFoundException;
 import com.ytalks.backend.security.UserPrincipal;
 import com.ytalks.backend.service.ConversationService;
@@ -42,6 +43,9 @@ public class ConversationController {
     }
 
     private User getCurrentUser(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        if (userPrincipal == null || userPrincipal.getUser() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required");
+        }
         return userPrincipal.getUser();
     }
 
@@ -119,11 +123,17 @@ public class ConversationController {
             @RequestBody UpdateConversationRequest request) {
 
         User user = getCurrentUser(userPrincipal);
-        Conversation conversation = conversationService.updateProvider(id, user,
-                request.providerId(), request.model());
+        Conversation conversation = conversationService.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", id.toString()));
+
+        if (request.providerId() != null || request.model() != null) {
+            String nextProvider = request.providerId() != null ? request.providerId() : conversation.getProviderId();
+            String nextModel = request.model() != null ? request.model() : conversation.getModel();
+            conversation = conversationService.updateProvider(id, user, nextProvider, nextModel);
+        }
 
         if (request.title() != null && !request.title().isBlank()) {
-            conversation = conversationService.updateTitle(id, user, request.title());
+            conversation = conversationService.updateTitle(id, user, request.title().trim());
         }
 
         return ResponseEntity.ok(toSummary(conversation));

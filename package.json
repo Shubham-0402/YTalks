@@ -9,7 +9,9 @@
     "serve": "node tools/serve.js",
     "test": "node tests/ui-smoke.mjs",
     "test:ui": "node tests/ui-smoke.mjs",
-    "test:m2": "node tests/m2-smoke.mjs"
+    "test:m2": "node tests/m2-smoke.mjs",
+    "test:m4": "node tests/m4-smoke.mjs",
+    "test:m5": "node tests/m5-smoke.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^23.11.1"

@@ -57,7 +57,13 @@ public class AuthService {
      * Completes registration after OTP verification.
      * Creates the user account with the provided password.
      */
+    @Transactional(noRollbackFor = AuthException.class)
     public AuthResponse completeRegistration(RegisterRequest request, VerifyOtpRequest otpRequest) {
+        // Check if user already exists
+        if (userService.existsByEmail(request.email())) {
+            throw AuthException.emailAlreadyExists();
+        }
+
         // Verify OTP
         if (!otpRequest.email().equalsIgnoreCase(request.email())) {
             throw AuthException.invalidOtp();

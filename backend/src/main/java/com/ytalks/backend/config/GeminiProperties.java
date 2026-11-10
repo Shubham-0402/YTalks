@@ -22,7 +22,7 @@ public class GeminiProperties {
     }
 
     public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
+        this.apiKey = sanitizeValue(apiKey);
     }
 
     public String getModel() {
@@ -30,7 +30,10 @@ public class GeminiProperties {
     }
 
     public void setModel(String model) {
-        this.model = model;
+        String cleaned = sanitizeValue(model);
+        if (cleaned != null && !cleaned.isBlank()) {
+            this.model = cleaned;
+        }
     }
 
     public int getTimeoutMs() {
@@ -45,6 +48,21 @@ public class GeminiProperties {
      * Checks if the Gemini provider is properly configured.
      */
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank();
+        return apiKey != null
+                && !apiKey.isBlank()
+                && !"your-gemini-api-key-here".equalsIgnoreCase(apiKey);
+    }
+
+    private static String sanitizeValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2
+                && ((trimmed.startsWith("\"") && trimmed.endsWith("\""))
+                || (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+        return trimmed;
     }
 }

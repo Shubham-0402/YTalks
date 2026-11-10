@@ -50,6 +50,27 @@ export const PROVIDERS = [
     defaultModel: 'deepseek-chat',
     implemented: false,
   },
+  {
+    // `implemented` is switched on at boot only if the backend reports it configured.
+    id: 'gemma',
+    name: 'Gemma 4 (OpenRouter)',
+    shortName: 'GMA',
+    accent: '#34a853',
+    description: 'Open Gemma 4 model served through OpenRouter (needs OPENROUTER_API_KEY).',
+    models: ['google/gemma-4-26b-a4b-it:free'],
+    defaultModel: 'google/gemma-4-26b-a4b-it:free',
+    implemented: false,
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    shortName: 'GRQ',
+    accent: '#f55036',
+    description: 'Ultra-fast LPU inference (configured via GROQ_API_KEY).',
+    models: ['openai/gpt-oss-20b'],
+    defaultModel: 'openai/gpt-oss-20b',
+    implemented: true,
+  },
 ];
 
 export const DEMO_USER = {

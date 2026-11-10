@@ -140,18 +140,25 @@ function pendingNode(p, state) {
 }
 
 function emptyState(state) {
-  const provider = selectProvider(state.activeProviderId, state);
+  const conversation = selectActiveConversation(state);
+  const provider = selectProvider(conversation?.providerId || state.activeProviderId, state);
+  const isMock = Boolean(state.settings?.useMockAi);
+  const descriptionHtml = isMock
+    ? `This is a <strong>mock</strong> conversation with ${esc(provider?.name || 'the selected provider')}.
+       Simulated replies are generated locally for UI testing.`
+    : provider?.implemented
+    ? `Connected to <strong>${esc(provider.name)}</strong> via the Ytalks backend.
+       Your conversation history and AI replies are persisted in MySQL.`
+    : `<strong>${esc(provider?.name || 'This provider')}</strong> is coming soon.
+       Switch to <strong>Google Gemini</strong> to send live AI messages.`;
+
   return `
     <div class="state" data-testid="empty-state">
       <span class="orb" aria-hidden="true">
         <span class="orb__glyph">${icon('sparkles', 26)}</span>
       </span>
       <p class="state__title">How can I help, ${esc((state.session.user?.name || 'there').split(' ')[0])}?</p>
-      <p class="state__text">
-        This is a <strong>mock</strong> conversation with ${esc(provider?.name || 'the selected provider')}.
-        No AI API is being called in Milestone 1 — replies are generated locally so the
-        interface can be demonstrated end to end.
-      </p>
+      <p class="state__text">${descriptionHtml}</p>
       <div class="state__actions">
         ${STARTER_PROMPTS.map(
           (prompt) =>
@@ -222,7 +229,8 @@ function renderMessages(state) {
     previous = message.createdAt;
   }
 
-  if (pending && pending.conversationId === conversation.id) {
+  if (pending && (pending.conversationId === conversation.id || pending.conversationId === state.activeConversationId)) {
+    pending.conversationId = conversation.id;
     chunks.push(pendingNode(pending, state));
   }
 
@@ -239,11 +247,18 @@ function renderHeader(state) {
     conversation?.providerId || state.activeProviderId,
     state
   );
-  const model = conversation?.model || provider?.defaultModel || '';
+  const model = provider?.implemented ? provider.defaultModel : conversation?.model || provider?.defaultModel || '';
 
   qs('#chat-title').textContent = conversation?.title || 'New conversation';
 
   const handoffs = (conversation?.messages || []).filter((m) => m.type === 'handoff').length;
+  const isMock = Boolean(state.settings?.useMockAi);
+  const statusBadge = isMock
+    ? '<span class="badge badge--demo">Mock</span>'
+    : provider?.implemented
+    ? provider.live ? '<span class="badge badge--provider">LIVE</span>' : '<span class="badge badge--demo">Not verified yet</span>'
+    : '<span class="badge badge--demo">Coming soon</span>';
+
   qs('#chat-subtitle').innerHTML = `
     <span class="badge badge--provider" data-provider="${esc(provider?.id || '')}"
           style="--provider-hue:${esc(provider?.accent || '#888')}">
@@ -251,7 +266,10 @@ function renderHeader(state) {
     </span>
     <span>${esc(model)}</span>
     ${handoffs ? `<span>· ${handoffs} cross-AI handoff${handoffs === 1 ? '' : 's'}</span>` : ''}
-    <span class="badge badge--demo">Mock</span>`;
+    ${statusBadge}`;
+
+  const foot = qs('#composer-mode-badge');
+  if (foot) foot.textContent = isMock ? 'Mock replies' : provider?.implemented ? (provider.live ? 'Live replies' : 'Live API (unverified)') : 'Coming soon';
 
   renderProviderTrigger(provider, model);
 }
@@ -461,14 +479,85 @@ const ERROR_PRESENTATION = {
   },
 };
 
+const BACKEND_ERROR_PRESENTATION = {
+  GEMINI_NOT_CONFIGURED: {
+    title: 'Gemini API key not configured',
+    message: 'The backend Gemini service is not configured because GEMINI_API_KEY is missing.',
+    hint: 'Set the GEMINI_API_KEY environment variable in backend/.env or your shell and restart the backend.',
+  },
+  GEMINI_AUTH_FAILED: {
+    title: 'Gemini authentication failed',
+    message: 'Google Gemini rejected the configured API key.',
+    hint: 'Verify that GEMINI_API_KEY in backend/.env is valid and authorized for the Generative Language API.',
+  },
+  GEMINI_RATE_LIMIT: {
+    title: 'Provider rate limit reached',
+    message: 'The AI provider refused the request because the rate limit or quota was exceeded.',
+    hint: 'Wait a few seconds and click Try again, or check your Google AI Studio quota.',
+  },
+  GEMINI_TIMEOUT: {
+    title: 'The provider timed out',
+    message: 'We waited for the reply but Google Gemini did not respond in time.',
+    hint: 'Large prompts can exceed the provider timeout. Try again or send a shorter message.',
+  },
+  GEMINI_ERROR: {
+    title: 'Gemini API error',
+    message: 'An upstream error occurred while communicating with Google Gemini.',
+    hint: 'Check that the configured GEMINI_MODEL is supported and try again.',
+  },
+  GROQ_NOT_CONFIGURED: {
+    title: 'Groq API key not configured',
+    message: 'The backend Groq service is not configured because GROQ_API_KEY is missing.',
+    hint: 'Set the GROQ_API_KEY environment variable in backend/.env and restart the backend.',
+  },
+  GROQ_AUTH_FAILED: {
+    title: 'Groq authentication failed',
+    message: 'Groq rejected the configured API key.',
+    hint: 'Verify that GROQ_API_KEY in backend/.env is a valid Groq API key.',
+  },
+  GROQ_RATE_LIMIT: {
+    title: 'Groq rate limit reached',
+    message: 'The Groq API rate limit was reached.',
+    hint: 'Wait a moment before retrying, or check your rate limits on Groq console.',
+  },
+  GROQ_TIMEOUT: {
+    title: 'Groq request timed out',
+    message: 'We waited for the reply but Groq did not respond in time.',
+    hint: 'Try again with a shorter prompt or retry shortly.',
+  },
+  GROQ_UNAVAILABLE: {
+    title: 'Groq is temporarily unavailable',
+    message: 'Groq returned an upstream service unavailable status.',
+    hint: 'Please retry shortly.',
+  },
+  GROQ_ERROR: {
+    title: 'Groq API error',
+    message: 'An error occurred while communicating with Groq.',
+    hint: 'Check the model and backend logs for details.',
+  },
+  PROVIDER_NOT_SUPPORTED: {
+    title: 'Provider not supported yet',
+    message: 'Only Google Gemini is integrated in Milestone 5.',
+    hint: 'Switch the conversation provider to Google Gemini to send live AI messages.',
+  },
+};
+
 function describeError(error, provider) {
-  const base = ERROR_PRESENTATION[error.kind] || {
+  if (error?.code && BACKEND_ERROR_PRESENTATION[error.code]) {
+    const mapped = BACKEND_ERROR_PRESENTATION[error.code];
+    return {
+      title: mapped.title,
+      message: error.message || mapped.message,
+      hint: mapped.hint,
+    };
+  }
+  const base = ERROR_PRESENTATION[error?.kind] || {
     title: 'Something went wrong',
-    message: error.message,
+    message: error?.message || 'Could not complete the chat request.',
   };
   return {
     ...base,
-    hint: error.hint || `Provider: ${provider?.name || 'unknown'}`,
+    hint: error?.hint || `Provider: ${provider?.name || 'unknown'}`,
   };
 }
 
@@ -477,7 +566,7 @@ async function handleSend(text) {
 
   const state = getState();
   let conversation = selectActiveConversation(state);
-  if (!conversation) conversation = createConversation(state.activeProviderId);
+  if (!conversation) conversation = await createConversation(state.activeProviderId);
 
   const providerId = conversation.providerId;
   const input = qs('#composer-input');
@@ -493,6 +582,7 @@ async function handleSend(text) {
     await sendMessage(text, {
       onStream: (partial) => {
         if (!pending) return;
+        pending.conversationId = getState().activeConversationId || pending.conversationId;
         pending.text = partial;
         patchStreamNode(partial);
       },
@@ -502,8 +592,13 @@ async function handleSend(text) {
     renderComposerState();
     scrollMessagesToEnd('smooth');
   } catch (error) {
+    if (!pending || error?.kind === 'cancelled') {
+      renderMessages(getState());
+      renderComposerState();
+      return;
+    }
     pending = {
-      conversationId: conversation.id,
+      conversationId: getState().activeConversationId || conversation.id,
       providerId,
       text: '',
       error: describeError(error, selectProvider(providerId)),

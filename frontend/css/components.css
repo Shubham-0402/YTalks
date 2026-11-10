@@ -32,7 +32,7 @@
 
 .btn--primary {
   background: var(--brand-gradient);
-  color: #fff;
+  color: var(--accent-contrast, #28152F);
   box-shadow: var(--shadow-sm);
 }
 
@@ -766,7 +766,7 @@
   width: 64px;
   height: 64px;
   border-radius: var(--radius-xl);
-  background: conic-gradient(from 210deg, #7c5cff, #22d3ee, #5b8cff, #7c5cff);
+  background: conic-gradient(from 210deg, #FFB52E, #DCE3E8, #28152F, #FFB52E);
   filter: blur(0.5px);
   animation: orb-spin 9s linear infinite;
 }
@@ -786,7 +786,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--accent, #FFB52E);
 }
 
 @keyframes orb-spin {

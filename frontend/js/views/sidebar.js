@@ -305,8 +305,7 @@ export function initSidebar() {
               iconName: 'log-out',
             });
             if (confirmed) {
-              logout();
-              showToast({ type: 'info', title: 'Signed out' });
+              await logout();
             }
           } }, [
             el('span', { class: 'menu__label', text: 'Sign out' }),

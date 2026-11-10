@@ -34,6 +34,7 @@ import {
   clearConversation as apiClearConversation,
   fetchMessages as apiFetchMessages,
   addMessage as apiAddMessage,
+  sendChatMessage as apiSendChatMessage,
   setAuthToken,
   clearAuthToken,
   isAuthenticated,
@@ -77,10 +78,10 @@ export async function login({ email, password }) {
 
 export async function register({ name, email, phone, password }) {
   // First step: initiate registration (sends OTP)
-  await apiRegister(name, email, phone, password);
+  const response = await apiRegister(name, email, phone, password);
 
-  // Return the email so the UI can show the OTP verification screen
-  return { email, name, phone, password };
+  // Return the email (and devOtp if present in dev mode) so the UI can show the OTP verification screen
+  return { email, name, phone, password, devOtp: response?.devOtp || null };
 }
 
 export async function verifyOtpAndRegister({ name, email, phone, password, code }) {
@@ -115,15 +116,25 @@ export async function verifyOtpAndRegister({ name, email, phone, password, code 
 }
 
 export async function resendOtp(email) {
-  await apiResendOtp(email);
+  const response = await apiResendOtp(email);
   showToast({ type: 'info', title: 'OTP resent', message: 'A new verification code has been sent.' });
+  return response;
 }
 
 export async function logout() {
   stopResponding();
-  await apiLogout();
+  try {
+    await apiLogout();
+  } catch {
+    /* ignore logout API errors when clearing local session */
+  }
   clearAuthToken();
-  commit((s) => ({ ...s, session: { isAuthenticated: false, user: null } }));
+  commit((s) => ({
+    ...s,
+    session: { isAuthenticated: false, user: null },
+    conversations: [],
+    activeConversationId: null,
+  }));
   showToast({ type: 'info', title: 'Signed out', message: 'You have been logged out.' });
 }
 
@@ -162,6 +173,50 @@ export async function restoreSession() {
   }
 }
 
+const PROVIDERS_BY_NAME = {
+  'OpenAI': 'openai',
+  'Google Gemini': 'gemini',
+  'Anthropic Claude': 'claude',
+  'DeepSeek': 'deepseek',
+  'Gemma 4 (OpenRouter)': 'gemma',
+  'Groq': 'groq',
+};
+
+function mapBackendMessage(msg, convProviderId, convModel) {
+  const senderType = msg.senderType.toLowerCase();
+  const isHandoff = msg.senderType === 'SYSTEM' && msg.content?.includes('Context transferred');
+  if (isHandoff) {
+    // Parse "Context transferred from <From> → <To>, <N> messages transferred"
+    const match = msg.content.match(/from\s+(.+?)\s*(?:→|->)\s*(.+?),\s*(\d+)\s*message/i);
+    const fromName = match ? match[1].trim() : '';
+    const toName = match ? match[2].trim() : '';
+    const messageCount = match ? Number(match[3]) : 0;
+    const fromProviderId = PROVIDERS_BY_NAME[fromName] || 'openai';
+    const toProviderId = PROVIDERS_BY_NAME[toName] || convProviderId || 'gemini';
+    const fromProvider = selectProvider(fromProviderId);
+    const toProvider = selectProvider(toProviderId);
+    return {
+      id: String(msg.id),
+      type: 'handoff',
+      content: msg.content,
+      createdAt: new Date(msg.createdAt).getTime(),
+      fromProviderId,
+      fromModel: fromProvider?.defaultModel || 'default',
+      toProviderId,
+      toModel: toProvider?.defaultModel || convModel || 'default',
+      messageCount,
+    };
+  }
+  return {
+    id: String(msg.id),
+    type: senderType,
+    content: msg.content,
+    createdAt: new Date(msg.createdAt).getTime(),
+    providerId: msg.providerId,
+    model: msg.model,
+  };
+}
+
 async function fetchConversationsFromBackend() {
   try {
     const response = await apiFetchConversations(0, 50);
@@ -175,34 +230,19 @@ async function fetchConversationsFromBackend() {
       messages: [], // List endpoint doesn't include messages
     }));
 
-    // Find the best conversation to load messages for
-    const bestConv = selectBestConversation(conversations);
-    if (bestConv) {
-      try {
-        const detail = await apiFetchConversation(bestConv.id);
-        const messages = detail.messages?.map(msg => {
-          const senderType = msg.senderType.toLowerCase();
-          // Detect handoff messages (SYSTEM type with handoff content)
-          const isHandoff = msg.senderType === 'SYSTEM' && msg.content?.includes('Context transferred');
-          return {
-            id: String(msg.id),
-            type: isHandoff ? 'handoff' : senderType,
-            content: msg.content,
-            createdAt: new Date(msg.createdAt).getTime(),
-            providerId: msg.providerId,
-            model: msg.model,
-          };
-        }) || [];
-        
-        // Update the best conversation with messages
-        const idx = conversations.findIndex(c => c.id === bestConv.id);
-        if (idx >= 0) {
-          conversations[idx] = { ...bestConv, messages };
+    // Load messages for all conversations so sidebar previews, full-text search,
+    // and handoff counts stay accurate across reloads.
+    await Promise.all(
+      conversations.map(async (conv, idx) => {
+        try {
+          const detail = await apiFetchConversation(conv.id);
+          const messages = detail.messages?.map((msg) => mapBackendMessage(msg, detail.providerId, detail.model)) || [];
+          conversations[idx] = { ...conv, messages };
+        } catch (error) {
+          console.error(`Failed to fetch conversation ${conv.id} detail:`, error);
         }
-      } catch (error) {
-        console.error('Failed to fetch best conversation detail:', error);
-      }
-    }
+      })
+    );
 
     return conversations;
   } catch (error) {
@@ -241,7 +281,20 @@ function selectBestConversation(conversations) {
 /* ------------------------------------------------------------------ */
 
 export function setSettings(patch) {
-  commit((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+  const enableMock =
+    patch.useMockAi !== undefined
+      ? Boolean(patch.useMockAi)
+      : 'mockLatencyMs' in patch || ('mockErrorMode' in patch && patch.mockErrorMode !== 'none')
+      ? true
+      : undefined;
+  commit((s) => ({
+    ...s,
+    settings: {
+      ...s.settings,
+      ...patch,
+      ...(enableMock !== undefined ? { useMockAi: enableMock } : {}),
+    },
+  }));
 }
 
 export function setTheme(theme) {
@@ -280,40 +333,91 @@ function newConversation({ providerId, model, title = 'New conversation' }) {
   };
 }
 
-export async function createConversation(providerId = getState().activeProviderId) {
-  const provider = selectProvider(providerId);
+// Maps temporary local conversation IDs to promises resolving their backend ID
+const pendingConversationCreates = new Map();
+const resolvedConversationIds = new Map();
+
+async function resolveBackendConversationId(id) {
+  if (!id) return id;
+  const strId = String(id);
+  if (/^\d+$/.test(strId)) return strId;
+  if (resolvedConversationIds.has(strId)) {
+    return resolvedConversationIds.get(strId);
+  }
+  const pendingPromise = pendingConversationCreates.get(strId);
+  if (pendingPromise) {
+    try {
+      const resolvedId = await pendingPromise;
+      if (resolvedId) return resolvedId;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (resolvedConversationIds.has(strId)) {
+    return resolvedConversationIds.get(strId);
+  }
+  const current = getState().activeConversationId;
+  if (current && /^\d+$/.test(String(current))) return String(current);
+  return strId;
+}
+
+export async function createConversation(providerId) {
+  const state = getState();
+  const resolvedProviderId =
+    providerId ||
+    (!state.settings.useMockAi && !selectProvider(state.activeProviderId, state)?.implemented
+      ? 'gemini'
+      : state.activeProviderId);
+  const provider = selectProvider(resolvedProviderId, state);
   const conversation = newConversation({
-    providerId,
+    providerId: resolvedProviderId,
     model: provider?.defaultModel || provider?.models?.[0] || 'default',
   });
+  const tempId = conversation.id;
 
   // Optimistically add to local store
   commit((s) => ({
     ...s,
     conversations: [conversation, ...s.conversations],
-    activeConversationId: conversation.id,
-    activeProviderId: providerId,
+    activeConversationId: tempId,
+    activeProviderId: resolvedProviderId,
     ui: { ...s.ui, sidebarOpen: false },
   }));
 
   // Persist to backend
-  try {
-    const backendConv = await apiCreateConversation(conversation.title, providerId, conversation.model);
-    // Replace the optimistic conversation with the backend version (which has a real ID)
-    // Also update activeConversationId to the new backend ID
-    commit((s) => ({
-      ...s,
-      activeConversationId: String(backendConv.id),
-      conversations: s.conversations.map((c) =>
-        c.id === conversation.id ? { ...c, id: String(backendConv.id), createdAt: new Date(backendConv.createdAt).getTime(), updatedAt: new Date(backendConv.updatedAt).getTime() } : c
-      ),
-    }));
-  } catch (error) {
-    console.error('Failed to create conversation on backend:', error);
-    // Keep the optimistic conversation if backend fails
-  }
+  const createPromise = (async () => {
+    try {
+      const latestLocal = getState().conversations.find((c) => c.id === tempId) || conversation;
+      const backendConv = await apiCreateConversation(latestLocal.title, latestLocal.providerId, latestLocal.model);
+      const realId = String(backendConv.id);
+      resolvedConversationIds.set(tempId, realId);
+      commit((s) => ({
+        ...s,
+        activeConversationId: s.activeConversationId === tempId ? realId : s.activeConversationId,
+        conversations: s.conversations.map((c) =>
+          c.id === tempId
+            ? {
+                ...c,
+                id: realId,
+                createdAt: new Date(backendConv.createdAt).getTime(),
+                updatedAt: new Date(backendConv.updatedAt).getTime(),
+              }
+            : c
+        ),
+      }));
+      return realId;
+    } catch (error) {
+      console.error('Failed to create conversation on backend:', error);
+      return null;
+    } finally {
+      pendingConversationCreates.delete(tempId);
+    }
+  })();
 
-  return conversation;
+  pendingConversationCreates.set(tempId, createPromise);
+  await createPromise;
+
+  return getState().conversations.find((c) => c.id === getState().activeConversationId) || conversation;
 }
 
 export function selectConversation(id) {
@@ -334,27 +438,16 @@ export function selectConversation(id) {
   // Otherwise, fetch the conversation detail with messages from the backend
   (async () => {
     try {
-      const detail = await apiFetchConversation(id);
-      const messages = detail.messages?.map(msg => {
-        const senderType = msg.senderType.toLowerCase();
-        // Detect handoff messages (SYSTEM type with handoff content)
-        const isHandoff = msg.senderType === 'SYSTEM' && msg.content?.includes('Context transferred');
-        return {
-          id: String(msg.id),
-          type: isHandoff ? 'handoff' : senderType,
-          content: msg.content,
-          createdAt: new Date(msg.createdAt).getTime(),
-          providerId: msg.providerId,
-          model: msg.model,
-        };
-      }) || [];
+      const backendId = await resolveBackendConversationId(id);
+      const detail = await apiFetchConversation(backendId);
+      const messages = detail.messages?.map((msg) => mapBackendMessage(msg, detail.providerId, detail.model)) || [];
       
       commit((s) => ({
         ...s,
         conversations: s.conversations.map((c) =>
-          c.id === id ? { ...c, messages } : c
+          c.id === id || c.id === backendId ? { ...c, messages } : c
         ),
-        activeConversationId: id,
+        activeConversationId: backendId,
         activeProviderId: detail.providerId,
         ui: { ...s.ui, sidebarOpen: false },
       }));
@@ -374,33 +467,64 @@ export function selectConversation(id) {
 export function renameConversation(id, title) {
   const clean = title.trim();
   if (!clean) return;
+  const targetId = resolvedConversationIds.get(String(id)) || id;
   commit((s) => ({
     ...s,
-    conversations: s.conversations.map((c) => (c.id === id ? { ...c, title: clean } : c)),
+    conversations: s.conversations.map((c) =>
+      c.id === id || c.id === targetId ? { ...c, title: clean, updatedAt: Date.now() } : c
+    ),
   }));
+
+  (async () => {
+    try {
+      const backendId = await resolveBackendConversationId(id);
+      if (/^\d+$/.test(backendId)) {
+        const conv = getState().conversations.find((c) => c.id === backendId || c.id === id);
+        await apiUpdateConversation(backendId, clean, conv?.providerId || null, conv?.model || null);
+      }
+    } catch (error) {
+      console.error('Failed to rename conversation on backend:', error);
+    }
+  })();
 }
 
 export function deleteConversation(id) {
+  const targetId = resolvedConversationIds.get(String(id)) || id;
   commit((s) => {
-    const remaining = s.conversations.filter((c) => c.id !== id);
+    const remaining = s.conversations.filter((c) => c.id !== id && c.id !== targetId);
     return {
       ...s,
       conversations: remaining,
       activeConversationId:
-        s.activeConversationId === id ? remaining[0]?.id || null : s.activeConversationId,
+        s.activeConversationId === id || s.activeConversationId === targetId
+          ? remaining[0]?.id || null
+          : s.activeConversationId,
     };
   });
+
+  (async () => {
+    try {
+      const backendId = await resolveBackendConversationId(id);
+      if (/^\d+$/.test(backendId)) {
+        await apiDeleteConversation(backendId);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation on backend:', error);
+    }
+  })();
 }
 
 /** Copy a conversation (including its messages) and open the copy. */
 export function duplicateConversation(id) {
-  const source = getState().conversations.find((c) => c.id === id);
+  const targetId = resolvedConversationIds.get(String(id)) || id;
+  const source = getState().conversations.find((c) => c.id === id || c.id === targetId);
   if (!source) return null;
 
   const stamp = Date.now().toString(36);
+  const tempId = uid('conv');
   const copy = {
     ...source,
-    id: uid('conv'),
+    id: tempId,
     title: `${source.title} (copy)`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -412,16 +536,63 @@ export function duplicateConversation(id) {
     conversations: [copy, ...s.conversations],
     activeConversationId: copy.id,
   }));
+
+  // Persist duplicated conversation and its messages to backend
+  const createPromise = (async () => {
+    try {
+      const backendConv = await apiCreateConversation(copy.title, copy.providerId, copy.model);
+      const realId = String(backendConv.id);
+      resolvedConversationIds.set(tempId, realId);
+      commit((s) => ({
+        ...s,
+        activeConversationId: s.activeConversationId === tempId ? realId : s.activeConversationId,
+        conversations: s.conversations.map((c) =>
+          c.id === tempId ? { ...c, id: realId } : c
+        ),
+      }));
+      for (const msg of source.messages) {
+        if (msg.type === 'user') {
+          await apiAddMessage(realId, 'USER', msg.content, null, null);
+        } else if (msg.type === 'assistant') {
+          await apiAddMessage(realId, 'ASSISTANT', msg.content, msg.providerId, msg.model);
+        } else if (msg.type === 'handoff') {
+          await apiAddMessage(realId, 'SYSTEM', msg.content || 'Context transferred', null, null);
+        }
+      }
+      return realId;
+    } catch (error) {
+      console.error('Failed to persist duplicated conversation to backend:', error);
+      return null;
+    } finally {
+      pendingConversationCreates.delete(tempId);
+    }
+  })();
+  pendingConversationCreates.set(tempId, createPromise);
+
   return copy;
 }
 
 export function clearConversation(id) {
+  const targetId = resolvedConversationIds.get(String(id)) || id;
   commit((s) => ({
     ...s,
     conversations: s.conversations.map((c) =>
-      c.id === id ? { ...c, messages: [], title: 'New conversation', updatedAt: Date.now() } : c
+      c.id === id || c.id === targetId
+        ? { ...c, messages: [], title: 'New conversation', updatedAt: Date.now() }
+        : c
     ),
   }));
+
+  (async () => {
+    try {
+      const backendId = await resolveBackendConversationId(id);
+      if (/^\d+$/.test(backendId)) {
+        await apiClearConversation(backendId);
+      }
+    } catch (error) {
+      console.error('Failed to clear conversation on backend:', error);
+    }
+  })();
 }
 
 /* ------------------------------------------------------------------ */
@@ -456,6 +627,7 @@ export function planProviderSwitch(targetProviderId) {
     type: 'handoff',
     from: selectProvider(conversation.providerId, state),
     to: target,
+    conversationTitle: conversation.title,
     messageCount: transferable.length,
     preview: transferable.slice(-3),
   };
@@ -465,6 +637,7 @@ export function planProviderSwitch(targetProviderId) {
 export function applyProviderSelection(targetProviderId) {
   const state = getState();
   const target = selectProvider(targetProviderId, state);
+  const activeId = state.activeConversationId;
   commit((s) => ({
     ...s,
     activeProviderId: targetProviderId,
@@ -474,6 +647,20 @@ export function applyProviderSelection(targetProviderId) {
         : c
     ),
   }));
+
+  if (activeId) {
+    (async () => {
+      try {
+        const backendId = await resolveBackendConversationId(activeId);
+        if (/^\d+$/.test(backendId)) {
+          const conv = getState().conversations.find((c) => c.id === backendId || c.id === activeId);
+          await apiUpdateConversation(backendId, conv?.title || null, targetProviderId, target?.defaultModel || conv?.model || null);
+        }
+      } catch (error) {
+        console.error('Failed to update conversation provider on backend:', error);
+      }
+    })();
+  }
 }
 
 /**
@@ -519,9 +706,12 @@ export async function continueConversationWithProvider(targetProviderId) {
 
   // Persist handoff message to backend
   try {
-    await apiAddMessage(conversation.id, 'SYSTEM', handoff.content || `Context transferred from ${from?.name || 'previous provider'} → ${target.name}, ${transferable.length} messages transferred`, null, null);
-    // Also update conversation provider/model on backend
-    await apiUpdateConversation(conversation.id, conversation.title, target.id, target.defaultModel);
+    const backendId = await resolveBackendConversationId(conversation.id);
+    if (/^\d+$/.test(backendId)) {
+      await apiAddMessage(backendId, 'SYSTEM', handoff.content || `Context transferred from ${from?.name || 'previous provider'} → ${target.name}, ${transferable.length} messages transferred`, null, null);
+      // Also update conversation provider/model on backend
+      await apiUpdateConversation(backendId, conversation.title, target.id, target.defaultModel);
+    }
   } catch (error) {
     console.error('Failed to persist handoff to backend:', error);
   }
@@ -552,12 +742,27 @@ export function setConversationModel(model) {
   const state = getState();
   const conversation = selectActiveConversation(state);
   const providerId = conversation?.providerId || state.activeProviderId;
+  const activeId = state.activeConversationId;
   commit((s) => ({
     ...s,
     conversations: s.conversations.map((c) =>
       c.id === s.activeConversationId ? { ...c, model, providerId } : c
     ),
   }));
+
+  if (activeId) {
+    (async () => {
+      try {
+        const backendId = await resolveBackendConversationId(activeId);
+        if (/^\d+$/.test(backendId)) {
+          const conv = getState().conversations.find((c) => c.id === backendId || c.id === activeId);
+          await apiUpdateConversation(backendId, conv?.title || null, providerId, model);
+        }
+      } catch (error) {
+        console.error('Failed to update conversation model on backend:', error);
+      }
+    })();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -569,10 +774,11 @@ function deriveTitle(text) {
 }
 
 function appendMessages(conversationId, messages) {
+  const targetId = resolvedConversationIds.get(String(conversationId)) || conversationId;
   commit((s) => ({
     ...s,
     conversations: s.conversations.map((c) => {
-      if (c.id !== conversationId) return c;
+      if (c.id !== conversationId && c.id !== targetId) return c;
       const isFirstUserMessage = !c.messages.some((m) => m.type === 'user');
       const firstUserMessage = messages.find((m) => m.type === 'user');
       return {
@@ -585,7 +791,7 @@ function appendMessages(conversationId, messages) {
   }));
 }
 
-/** Send a user message and stream the mocked provider reply. */
+/** Send a user message and request the AI provider reply. */
 export async function sendMessage(text, { onStream } = {}) {
   const clean = String(text || '').trim();
   if (!clean) return null;
@@ -595,8 +801,10 @@ export async function sendMessage(text, { onStream } = {}) {
 
   // No conversation open yet (or brand-new account) — create one lazily.
   if (!conversation) {
-    conversation = createConversation(state.activeProviderId);
+    conversation = await createConversation(state.activeProviderId);
   }
+
+  const wasFirstUserMessage = !conversation.messages.some((m) => m.type === 'user');
 
   const userMessage = {
     id: uid('msg'),
@@ -609,50 +817,155 @@ export async function sendMessage(text, { onStream } = {}) {
 
   appendMessages(conversation.id, [userMessage]);
 
-  const result = await runAssistantReply({ conversationId: conversation.id, onStream });
+  const backendConvId = await resolveBackendConversationId(conversation.id);
+  const useMock = Boolean(getState().settings?.useMockAi);
+
+  if (/^\d+$/.test(backendConvId)) {
+    try {
+      // In mock mode, persist the user message via /api/conversations/{id}/messages.
+      // In real mode, POST /api/chat/{id}/messages persists both user and assistant messages
+      // (with retry deduplication), avoiding duplicate user messages in MySQL.
+      if (useMock) {
+        const savedMsg = await apiAddMessage(backendConvId, 'USER', clean, null, null);
+        if (savedMsg?.id) {
+          commit((s) => ({
+            ...s,
+            conversations: s.conversations.map((c) =>
+              c.id === backendConvId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) => (m.id === userMessage.id ? { ...m, id: String(savedMsg.id) } : m)),
+                  }
+                : c
+            ),
+          }));
+        }
+      }
+      if (wasFirstUserMessage) {
+        const updatedConv = getState().conversations.find((c) => c.id === backendConvId);
+        if (updatedConv) {
+          await apiUpdateConversation(backendConvId, updatedConv.title, updatedConv.providerId, updatedConv.model);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to persist conversation metadata to backend:', error);
+    }
+  }
+
+  const result = await runAssistantReply({ conversationId: backendConvId, onStream });
   return result;
 }
 
 /**
- * Ask the (mock) provider for a reply to the latest user message.
- * Shared by the normal send flow and the Retry button on error states.
+ * Request an assistant reply to the latest user message.
+ * Uses POST /api/chat/{conversationId}/messages for real backend chat,
+ * or mock-ai.js only when mock mode is explicitly enabled for prototype testing.
  */
 export async function runAssistantReply({ conversationId, onStream } = {}) {
   const state = getState();
-  const id = conversationId || state.activeConversationId;
-  const conversation = state.conversations.find((c) => c.id === id);
+  const resolvedId = await resolveBackendConversationId(conversationId || state.activeConversationId);
+  const conversation = getState().conversations.find((c) => c.id === resolvedId || c.id === conversationId);
   if (!conversation) return null;
 
-  const provider = selectProvider(conversation.providerId, state);
+  const provider = selectProvider(conversation.providerId, getState());
   if (!provider) return null;
 
   const lastUserMessage = [...conversation.messages].reverse().find((m) => m.type === 'user');
   if (!lastUserMessage) return null;
 
   activeController = new AbortController();
+  const useMock = Boolean(getState().settings?.useMockAi);
 
   try {
+    if (!useMock) {
+      const backendConvId = await resolveBackendConversationId(conversation.id);
+      const response = await apiSendChatMessage(
+        backendConvId,
+        lastUserMessage.content,
+        provider.id,
+        conversation.model,
+        { signal: activeController.signal }
+      );
+
+      onStream?.(response.content);
+      if (provider) provider.live = true; // verified by a real backend reply
+
+      const assistantMsg = {
+        id: String(response.messageId || uid('msg')),
+        type: 'assistant',
+        content: response.content,
+        createdAt: Date.now(),
+        providerId: response.providerId || provider.id,
+        model: response.model || conversation.model,
+        latencyMs: response.latencyMs,
+      };
+
+      const currentConvId = getState().conversations.find((c) => c.id === resolvedId)?.id || conversation.id;
+      appendMessages(currentConvId, [assistantMsg]);
+
+      if (response.model && response.model !== conversation.model) {
+        commit((s) => ({
+          ...s,
+          conversations: s.conversations.map((c) =>
+            c.id === currentConvId || c.id === backendConvId ? { ...c, model: response.model } : c
+          ),
+        }));
+      }
+
+      return {
+        text: response.content,
+        model: response.model || conversation.model,
+        latencyMs: response.latencyMs,
+      };
+    }
+
     const result = await requestCompletion({
       conversation,
       provider,
       model: conversation.model,
       userText: lastUserMessage.content,
-      settings: state.settings,
+      settings: getState().settings,
       signal: activeController.signal,
       onDelta: onStream,
     });
 
-    appendMessages(conversation.id, [
-      {
-        id: uid('msg'),
-        type: 'assistant',
-        content: result.text,
-        createdAt: Date.now(),
-        providerId: provider.id,
-        model: result.model,
-        latencyMs: result.latencyMs,
-      },
-    ]);
+    const assistantMsg = {
+      id: uid('msg'),
+      type: 'assistant',
+      content: result.text,
+      createdAt: Date.now(),
+      providerId: provider.id,
+      model: result.model,
+      latencyMs: result.latencyMs,
+    };
+
+    const currentConvId = getState().conversations.find((c) => c.id === resolvedId)?.id || conversation.id;
+    appendMessages(currentConvId, [assistantMsg]);
+
+    // Persist mocked assistant reply to backend
+    const backendConvId = await resolveBackendConversationId(currentConvId);
+    if (/^\d+$/.test(backendConvId)) {
+      try {
+        const savedAssistant = await apiAddMessage(backendConvId, 'ASSISTANT', result.text, provider.id, result.model);
+        if (savedAssistant?.id) {
+          commit((s) => ({
+            ...s,
+            conversations: s.conversations.map((c) =>
+              c.id === backendConvId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === assistantMsg.id ? { ...m, id: String(savedAssistant.id) } : m
+                    ),
+                  }
+                : c
+            ),
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to persist assistant message to backend:', error);
+      }
+    }
 
     return result;
   } finally {

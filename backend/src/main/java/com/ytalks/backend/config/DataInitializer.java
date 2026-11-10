@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -32,6 +33,7 @@ public class DataInitializer {
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     @Bean
+    @Order(1)
     CommandLineRunner seedAiProviders(AiProviderService providerService) {
         return args -> {
             log.info("Seeding AI provider records...");
@@ -40,6 +42,8 @@ public class DataInitializer {
             providerService.ensureProvider("Google Gemini", "gemini", true);
             providerService.ensureProvider("Anthropic Claude", "claude", true);
             providerService.ensureProvider("DeepSeek", "deepseek", true);
+            providerService.ensureProvider("Gemma 4 (OpenRouter)", "gemma", true);
+            providerService.ensureProvider("Groq", "groq", true);
 
             long count = providerService.getAllProviders().size();
             log.info("AI provider seeding complete: {} provider(s) in database", count);
@@ -47,11 +51,20 @@ public class DataInitializer {
     }
 
     @Bean
+    @Order(2)
     CommandLineRunner seedDemoUser(UserService userService,
                                     ConversationService conversationService,
                                     AiProviderService providerService) {
         return args -> {
             log.info("Seeding demo user and conversations...");
+
+            // Ensure AI providers exist before seeding conversations that reference them
+            providerService.ensureProvider("OpenAI", "openai", true);
+            providerService.ensureProvider("Google Gemini", "gemini", true);
+            providerService.ensureProvider("Anthropic Claude", "claude", true);
+            providerService.ensureProvider("DeepSeek", "deepseek", true);
+            providerService.ensureProvider("Gemma 4 (OpenRouter)", "gemma", true);
+            providerService.ensureProvider("Groq", "groq", true);
 
             // Create or get demo user
             String demoEmail = "aarav.sharma@example.com";

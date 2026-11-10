@@ -12,6 +12,8 @@ import com.ytalks.backend.exception.ResourceNotFoundException;
 import com.ytalks.backend.security.UserPrincipal;
 import com.ytalks.backend.service.ConversationService;
 import com.ytalks.backend.service.GeminiService;
+import com.ytalks.backend.service.GroqService;
+import com.ytalks.backend.service.OpenRouterService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,10 +39,15 @@ public class ChatController {
 
     private final ConversationService conversationService;
     private final GeminiService geminiService;
+    private final OpenRouterService openRouterService;
+    private final GroqService groqService;
 
-    public ChatController(ConversationService conversationService, GeminiService geminiService) {
+    public ChatController(ConversationService conversationService, GeminiService geminiService,
+                          OpenRouterService openRouterService, GroqService groqService) {
         this.conversationService = conversationService;
         this.geminiService = geminiService;
+        this.openRouterService = openRouterService;
+        this.groqService = groqService;
     }
 
     private User getCurrentUser(UserPrincipal userPrincipal) {
@@ -74,13 +81,26 @@ public class ChatController {
 
         // 2. Validate provider
         String providerId = request.providerId() != null ? request.providerId() : conversation.getProviderId();
-        if (providerId == null || !providerId.equalsIgnoreCase("gemini")) {
+        boolean isGroq = providerId != null && providerId.equalsIgnoreCase("groq");
+        boolean isGemma = providerId != null && providerId.equalsIgnoreCase("gemma");
+        boolean isGemini = providerId != null && providerId.equalsIgnoreCase("gemini");
+        if (providerId == null || !(isGroq || isGemma || isGemini)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PROVIDER_NOT_SUPPORTED",
-                    "Only Google Gemini is supported in Milestone 5. Requested: " + providerId);
+                    "Only Google Gemini, Groq, and Gemma 4 (OpenRouter) are supported. Requested: " + providerId);
         }
 
-        // 3. Verify Gemini is configured
-        if (!geminiService.isConfigured()) {
+        // 3. Verify the selected provider is configured
+        if (isGroq) {
+            if (!groqService.isConfigured()) {
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GROQ_NOT_CONFIGURED",
+                        "Groq is not configured. Please set GROQ_API_KEY in the backend environment.");
+            }
+        } else if (isGemma) {
+            if (!openRouterService.isConfigured()) {
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OPENROUTER_NOT_CONFIGURED",
+                        "Gemma (OpenRouter) is not configured. Please set OPENROUTER_API_KEY in the backend environment.");
+            }
+        } else if (!geminiService.isConfigured()) {
             throw new GeminiNotConfiguredException(
                     "Gemini provider is not configured. Please set GEMINI_API_KEY environment variable.");
         }
@@ -99,28 +119,41 @@ public class ChatController {
 
         if (userMessage == null) {
             userMessage = conversationService.addUserMessage(conversation, userText);
-            history = conversationService.findMessages(conversation);
+            history = new java.util.ArrayList<>(conversationService.findMessages(conversation));
+            if (history.isEmpty() || !java.util.Objects.equals(history.get(history.size() - 1).getId(), userMessage.getId())) {
+                history.add(userMessage);
+            }
         }
 
         // 5. Send conversation history to Gemini
-        String model = request.model() != null ? request.model() : conversation.getModel();
-        if (model == null || model.isBlank()) {
-            model = geminiService.getModel();
-        }
+        // History = every saved USER/ASSISTANT row of this conversation (from MySQL), so a provider
+        // switched to mid-conversation receives the earlier turns as explicit context.
+        String savedProvider = isGroq ? "groq" : (isGemma ? "gemma" : "gemini");
+        String configuredModel = isGroq ? groqService.getModel() : (isGemma ? openRouterService.getModel() : geminiService.getModel());
+        String model = (configuredModel != null && !configuredModel.isBlank())
+                ? configuredModel
+                : (request.model() != null && !request.model().isBlank() ? request.model() : conversation.getModel());
 
-        log.info("Sending chat message for conversation {} to Gemini ({})", conversationId, model);
-        String assistantResponse = geminiService.sendMessage(history);
+        log.info("Sending chat message for conversation {} to {} ({})", conversationId, savedProvider, model);
+        String assistantResponse;
+        if (isGroq) {
+            assistantResponse = groqService.sendMessage(history);
+        } else if (isGemma) {
+            assistantResponse = openRouterService.sendMessage(history);
+        } else {
+            assistantResponse = geminiService.sendMessage(history);
+        }
 
         // 6. Save assistant response to MySQL
         Message assistantMessage = conversationService.addAssistantMessage(
-                conversation, assistantResponse, "gemini", model);
+                conversation, assistantResponse, savedProvider, model);
 
         long latencyMs = System.currentTimeMillis() - startTime;
 
         ChatResponse response = new ChatResponse(
                 String.valueOf(assistantMessage.getId()),
                 assistantResponse,
-                "gemini",
+                savedProvider,
                 assistantMessage.getModel(),
                 latencyMs
         );
@@ -138,7 +171,9 @@ public class ChatController {
                 new ProviderInfo("gemini", "Google Gemini", geminiService.getModel(), true),
                 new ProviderInfo("openai", "OpenAI", "gpt-4.1-mini", false),
                 new ProviderInfo("claude", "Anthropic Claude", "claude-sonnet-4-5", false),
-                new ProviderInfo("deepseek", "DeepSeek", "deepseek-chat", false)
+                new ProviderInfo("deepseek", "DeepSeek", "deepseek-chat", false),
+                new ProviderInfo("gemma", "Gemma 4 (OpenRouter)", openRouterService.getModel(), openRouterService.isConfigured()),
+                new ProviderInfo("groq", "Groq", groqService.getModel(), groqService.isConfigured())
         ));
     }
 

@@ -16,7 +16,8 @@ import { initAuthScreen, showScreen, renderAuthScreen } from './views/auth.js';
 import { initSidebar, renderSidebar } from './views/sidebar.js';
 import { initChat, renderChat, chatInternals } from './views/chat.js';
 import { openSettingsDialog } from './views/settings.js';
-import { fetchHealth, backendBaseUrl } from './backend.js';
+import { fetchHealth, backendBaseUrl, fetchChatProviders } from './backend.js';
+import { PROVIDERS } from './mock-data.js';
 
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
@@ -154,6 +155,26 @@ async function boot() {
 
   subscribe(render);
   render(getState());
+
+  // Single source of truth for the Gemini model: the backend (GEMINI_MODEL).
+  fetchChatProviders()
+    .then((list) => {
+      for (const info of Array.isArray(list) ? list : []) {
+        const p = PROVIDERS.find((x) => x.id === info.id);
+        if (p) {
+          if (info.id === 'gemma' || info.id === 'groq') {
+            p.implemented = Boolean(info.implemented);
+          }
+          const modelName = info.defaultModel || info.model;
+          if (info.implemented && modelName) {
+            p.models = [modelName];
+            p.defaultModel = modelName;
+          }
+        }
+      }
+      render(getState());
+    })
+    .catch(() => {});
 
   // A small, deliberate testing surface. The Milestone 1 smoke test drives the
   // app through this object instead of poking at private internals.

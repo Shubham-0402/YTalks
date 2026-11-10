@@ -36,6 +36,19 @@ class GeminiServiceTest {
 
         properties.setApiKey("   ");
         assertThat(geminiService.isConfigured()).isFalse();
+
+        properties.setApiKey("your-gemini-api-key-here");
+        assertThat(geminiService.isConfigured()).isFalse();
+    }
+
+    @Test
+    @DisplayName("GeminiProperties trims whitespace and surrounding quotes on apiKey and model")
+    void propertiesTrimsQuotesAndWhitespace() {
+        properties.setApiKey("  \"test-key-123\"  ");
+        properties.setModel("  'gemini-2.5-flash'  ");
+        assertThat(properties.getApiKey()).isEqualTo("test-key-123");
+        assertThat(properties.getModel()).isEqualTo("gemini-2.5-flash");
+        assertThat(properties.isConfigured()).isTrue();
     }
 
     @Test

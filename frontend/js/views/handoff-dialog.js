@@ -90,11 +90,10 @@ export function openHandoffDialog(plan, { onContinue, onNewChat, onCancel }) {
     previewList(plan),
   ]);
 
+  const topic = plan.conversationTitle ? `discussing "${plan.conversationTitle}"` : `chatting`;
   const controller = openDialog({
     title: `Continue this conversation with ${plan.to.name}?`,
-    description: `You have ${plan.messageCount} message${
-      plan.messageCount === 1 ? '' : 's'
-    } in this chat, currently on ${plan.from.name}.`,
+    description: `I noticed that you were previously ${topic} with ${plan.from.name}. Would you like ${plan.to.name} to continue the same conversation using your previous chat history?`,
     iconName: 'arrows',
     wide: true,
     stack: true,
@@ -103,8 +102,8 @@ export function openHandoffDialog(plan, { onContinue, onNewChat, onCancel }) {
     onClose: handleCancel,
     actions: [
       { label: 'Cancel', variant: 'ghost', onClick: handleCancel },
-      { label: 'Start new chat', variant: 'secondary', onClick: handleNewChat },
-      { id: 'handoff-continue', label: 'Continue conversation', variant: 'primary', onClick: handleContinue },
+      { label: 'No, start fresh', variant: 'secondary', onClick: handleNewChat },
+      { id: 'handoff-continue', label: 'Yes, continue previous conversation', variant: 'primary', onClick: handleContinue },
     ],
   });
 
