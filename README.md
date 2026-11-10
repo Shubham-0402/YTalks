@@ -1,232 +1,344 @@
-# Ytalks
+# Ytalks – Multi-AI Chat Platform
 
-A multi-AI chat workspace: hold one conversation and move it between OpenAI, Google Gemini,
-Anthropic Claude and DeepSeek without losing the thread.
+[![Java](https://img.shields.io/badge/Java-17-orange.svg)](https://www.oracle.com/java/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x%20%2F%204.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![MySQL](https://img.shields.io/badge/MySQL-8.4-blue.svg)](https://www.mysql.com/)
+[![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)]()
 
-**Status: Milestone 3 complete.** The frontend prototype (Milestone 1) runs on mock data,
-plus a Spring Boot REST foundation with MySQL/JPA persistence (Milestone 3). The backend
-provides REST endpoints for conversations, messages, and AI providers. No authentication
-or real provider calls exist yet.
+> A unified, cross-model conversational workspace where users can seamlessly switch between top-tier AI providers (Google Gemini, Groq, OpenRouter) within the same conversation without losing context, message history, or conversational momentum.
 
-## Run it
+---
 
-```bash
-npm install     # one dev dependency: puppeteer-core (tests only)
-npm start       # http://localhost:4173/
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Technology Stack](#technology-stack)
+- [System Architecture](#system-architecture)
+- [Project Structure](#project-structure)
+- [Installation and Setup](#installation-and-setup)
+  - [Prerequisites](#prerequisites)
+  - [Step 1: Clone the Repository](#step-1-clone-the-repository)
+  - [Step 2: Database Configuration](#step-2-database-configuration)
+  - [Step 3: Environment Configuration](#step-3-environment-configuration)
+  - [Step 4: Run the Backend](#step-4-run-the-backend)
+  - [Step 5: Launch the Frontend](#step-5-launch-the-frontend)
+- [Environment Variables](#environment-variables)
+- [API Overview](#api-overview)
+- [Screenshots](#screenshots)
+- [Future Improvements](#future-improvements)
+- [Author](#author)
+
+---
+
+## Overview
+
+Modern generative AI models each possess distinct strengths—reasoning, code synthesis, low-latency token streaming, or specialized domain knowledge. Traditionally, querying different models requires jumping across fragmented web interfaces and manually copy-pasting conversation histories.
+
+**Ytalks** solves this friction by providing a unified multi-AI chat workspace. With Ytalks, you can hold an ongoing dialogue and switch between **Google Gemini**, ultra-fast **Groq** models, and **Gemma via OpenRouter** on the fly. Thanks to intelligent **cross-model context continuity**, conversation history is preserved in MySQL and automatically summarized or transferred to the incoming model, enabling frictionless multi-AI collaboration.
+
+---
+
+## Key Features
+
+- **Multi-Model Provider Switching**: Seamlessly change AI providers mid-stream (Google Gemini, Groq, OpenRouter/Gemma) directly from the message composer.
+- **Cross-AI Conversation Handoff**: Continue an existing conversation on a new AI engine with inherited context, branch into a fresh chat session, or cancel—maintaining context continuity across different LLMs.
+- **Secure Authentication & OTP Verification**: User registration with real email verification and developer-friendly OTP logging modes, backed by industry-standard JWT authentication.
+- **Persistent MySQL Storage**: Robust relational persistence of user accounts, conversations, multi-provider message trails, and AI metadata.
+- **Zero-Dependency Modern Frontend**: Clean, responsive, vanilla JavaScript and CSS glassmorphism UI designed with high-contrast accessibility in a signature aesthetic palette:
+  - **Ice Silver** (`#DCE3E8`)
+  - **Deep Aubergine** (`#28152F`)
+  - **Glowing Marigold** (`#FFB52E`)
+- **Full Conversation Management**: Create, rename, search (by title or message contents), clear, duplicate, and delete chat threads.
+- **Health Monitoring & Auto-Reconnect**: Automatic backend health polling and real-time provider readiness status.
+
+---
+
+## Technology Stack
+
+### Backend
+- **Language**: Java 17 (Amazon Corretto / OpenJDK)
+- **Framework**: Spring Boot (Spring Web, Spring Security, Spring Data JPA)
+- **Build Tool**: Apache Maven (via Maven Wrapper `mvnw` / `mvnw.cmd`)
+- **Persistence & ORM**: Hibernate / Spring Data JPA
+- **Database**: MySQL 8.4+
+- **Security & Tokens**: JJWT (Java JWT `0.12.5`), BCrypt password hashing
+- **AI Integrations**:
+  - Google GenAI Java SDK (`com.google.genai:google-genai`)
+  - Groq API (OpenAI-compatible REST client with HTTP Keep-Alive & timeout resilience)
+  - OpenRouter API (Gemma 4 integration via REST)
+
+### Frontend
+- **Core**: Vanilla HTML5, CSS3, JavaScript (ES6+ Modules)
+- **Styling Architecture**: Custom CSS Glassmorphism with ambient dynamic glow and high-contrast color tokens
+- **Local Dev Server**: Node.js zero-dependency static file server (`tools/serve.js`)
+
+---
+
+## System Architecture
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   Browser Client                       │
+│    (HTML5 / CSS3 / ES6+ JS / Glassmorphism UI)         │
+└───────────────────────────┬────────────────────────────┘
+                            │ REST / JSON (JWT Auth)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                Spring Boot REST Backend                │
+│                                                        │
+│  ┌──────────────────┐            ┌──────────────────┐  │
+│  │ Security Filter  │            │  Chat & Context  │  │
+│  │   & JWT Engine   │            │ Continuity Engine│  │
+│  └────────┬─────────┘            └────────┬─────────┘  │
+│           │                               │            │
+│  ┌────────▼───────────────────────────────▼─────────┐  │
+│  │                Service Layer                     │  │
+│  │ (AuthService, ConversationService, GeminiService, │  │
+│  │       GroqService, OpenRouterService)            │  │
+│  └────────┬───────────────────────────────┬─────────┘  │
+└───────────┼───────────────────────────────┼────────────┘
+            │                               │
+            ▼ JDBC                          ▼ HTTPS REST
+┌──────────────────────┐   ┌─────────────────────────────────┐
+│     MySQL 8.4        │   │       External AI Services      │
+│ (Users, Conversations│   │  • Google Gemini API            │
+│    Messages, OTPs)   │   │  • Groq API                     │
+└──────────────────────┘   │  • OpenRouter API (Gemma)       │
+                           └─────────────────────────────────┘
 ```
 
-`npm start` runs a zero-dependency static file server (`tools/serve.js`). Pass a port to override it:
-`node tools/serve.js 8080`.
+1. **Frontend**: Sends client requests to Spring Boot controllers using secure `Bearer` JWT tokens.
+2. **Context Engine**: When a user switches models and submits a prompt, the backend retrieves conversation history from MySQL, formats the context for the target provider's schema, and injects continuity summaries.
+3. **Provider Layer**: Communicates with upstream AI endpoints via isolated services with dedicated connection and read timeouts.
+4. **Database Layer**: Persists user interactions, provider metadata, and message timestamps securely.
 
-### Backend (Milestone 3)
+---
 
-**Prerequisites:**
-- MySQL 8.0+ running on localhost:3306 (or configure via environment variables)
-- Database `ytalks` will be created automatically
-- Root user with password `change_me` (change in production!)
+## Project Structure
 
+```text
+YTalks/
+├── backend/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/ytalks/backend/
+│   │   │   │   ├── controller/      # Auth, Chat, Conversation, Provider controllers
+│   │   │   │   ├── model/           # JPA entities (User, Conversation, Message, etc.)
+│   │   │   │   ├── repository/      # Spring Data JPA repositories
+│   │   │   │   ├── security/        # JWT filters, security configuration
+│   │   │   │   └── service/         # Business logic & AI provider clients
+│   │   │   └── resources/
+│   │   │       └── application.yml  # Application properties & provider configs
+│   │   └── test/                    # Backend unit and integration tests
+│   ├── .env.example                 # Template for environment configuration
+│   ├── mvnw / mvnw.cmd              # Maven wrapper scripts
+│   └── pom.xml                      # Maven dependencies and build plugins
+├── frontend/
+│   ├── assets/                      # Icons, logos, and UI graphics
+│   ├── css/
+│   │   ├── ambient.css              # Ambient background glow & animations
+│   │   ├── auth.css                 # Auth modals & OTP forms
+│   │   ├── chat.css                 # Message cards, composer, handoff modals
+│   │   ├── sidebar.css              # Conversation list & navigation
+│   │   └── styles.css               # Color variables and core typography
+│   ├── js/
+│   │   ├── api.js                   # Backend HTTP API client
+│   │   ├── app.js                   # Application lifecycle & state bootstrap
+│   │   ├── auth.js                  # Authentication & OTP flows
+│   │   ├── chat.js                  # Message rendering & streaming
+│   │   ├── handoff.js               # Cross-AI handoff orchestration
+│   │   └── sidebar.js               # History management & search
+│   └── index.html                   # Single-page interface
+├── tools/
+│   └── serve.js                     # Zero-dependency local static file server
+├── docs/                            # Project specifications & milestone records
+├── tests/                           # End-to-end and UI automation scripts
+├── package.json                     # Frontend scripts and test dependencies
+└── README.md                        # Project documentation
+```
+
+---
+
+## Installation and Setup
+
+### Prerequisites
+
+- **Java Development Kit (JDK)**: Java 17 or higher (`java -version`)
+- **Node.js**: v18+ (for running the local development server)
+- **MySQL Server**: 8.0 or 8.4+ running locally on port `3306`
+- **AI API Keys**: Valid API key from [Google AI Studio](https://aistudio.google.com/) and/or [Groq Console](https://console.groq.com/)
+
+---
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/your-username/ytalks.git
+cd ytalks
+```
+
+---
+
+### Step 2: Database Configuration
+
+Ensure your MySQL instance is running. The database `ytalks` will be created automatically upon backend startup if it does not already exist.
+
+To verify MySQL via terminal:
+```bash
+mysql -u root -p -e "SHOW DATABASES;"
+```
+
+---
+
+### Step 3: Environment Configuration
+
+Create a `.env` file in the `backend/` directory by copying the example:
+
+```bash
+# On Linux / macOS
+cp backend/.env.example backend/.env
+
+# On Windows (PowerShell)
+Copy-Item backend\.env.example backend\.env
+```
+
+Edit `backend/.env` with your actual database credentials and API keys (see [Environment Variables](#environment-variables)).
+
+---
+
+### Step 4: Run the Backend
+
+Navigate to the `backend` folder and run the Spring Boot application using the included Maven Wrapper:
+
+**Windows (PowerShell / CMD):**
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run
+```
+
+**macOS / Linux:**
 ```bash
 cd backend
-./mvnw package          # builds target/ytalks-backend-0.3.0.jar (17 tests)
-./mvnw spring-boot:run  # http://localhost:8080/api/health
+chmod +x mvnw
+./mvnw spring-boot:run
 ```
 
-`mvnw`/`mvnw.cmd` are the Maven Wrapper — no Maven installation is required (Java 17+ is).
-Configuration lives in `backend/src/main/resources/application.yml`; every setting has a
-default and can be overridden with an environment variable (`YTALKS_PORT`,
-`YTALKS_CORS_ALLOWED_ORIGINS`, `YTALKS_DB_HOST`, `YTALKS_DB_PASSWORD`, …) — see `backend/.env.example`.
-
-The frontend badge in the chat header polls `GET /api/health` every 30s and shows
-**connected** or **offline** accordingly. To point the frontend at a different backend:
-`localStorage.setItem('ytalks.backendBase', 'http://your-host:8080')`.
-
-### Demo account
-
-| Field    | Value                    |
-| -------- | ------------------------ |
-| Email    | `aarav.sharma@example.com` |
-| Password | `Demo@12345`             |
-
-Signing in is mocked in the browser. The demo email requires the demo password; any other email is
-accepted with a password of 8+ characters, and "Create account" validates a new profile locally and
-signs you straight in.
-
-## What you can do in Milestone 1
-
-- Sign in / register, with client-side validation and a password strength meter.
-- Browse conversation history grouped by day, search it by title **and** message text.
-- Open a conversation, send a message, watch a streamed reply arrive, stop it mid-flight, retry a failure.
-- Switch provider and model from the composer (OpenAI / Gemini / Claude / DeepSeek).
-- **Cross-AI handoff**: switch provider mid-thread and choose to continue the same conversation
-  (context is transferred and recorded), start a new chat, or cancel.
-- Rename, duplicate, export and delete conversations; clear a single thread.
-- Switch dark/light theme, tune the mock latency and error rate, view stats.
-
-State is kept in `localStorage` under `ytalks.milestone1.v1`, so a reload restores the session,
-the history and every handoff.
-
-## Look
-
-The interface sits on a fixed, non-interactive cinematic background
-(`frontend/css/ambient.css`): four drifting radial glows, a hairline grid
-masked to the light sources, film grain and a vignette. Glass surfaces
-(sidebar, auth panel, topbar, chat header, composer, cards) sit above it,
-and a reading scrim keeps the message column deliberately calm — measured
-at ~0.005 mean luminance versus ~0.008 at the edges, so the backdrop never
-competes with text. `prefers-reduced-motion` disables the drift, and the
-ambient layer is fully re-tokenised for the light theme.
-
-### How the cross-AI handoff behaves
-
-The application owns the history — each conversation is a list of messages tagged with the provider
-that produced them, never a per-provider copy.
-
-| Choice                | Result                                                                                |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| **Continue conversation** | The same thread continues on the new provider. A handoff divider is inserted, context is summarised and the new AI acknowledges the inherited messages. Original messages are untouched. |
-| **Start new chat**     | A new, empty conversation opens on the new provider. The previous conversation is left exactly as it was. |
-| **Cancel**             | Nothing changes — you stay on the original provider.                                |
-
-## Milestone 3 — MySQL Database + JPA Persistence
-
-### Database schema
-
-The following tables are created automatically by Hibernate (`ddl-auto: update`):
-
-- **users** — application users (prepared for Milestone 4 authentication)
-  - `id` (BIGINT, PK), `name` (VARCHAR), `email` (VARCHAR, UNIQUE), `phone` (VARCHAR),
-  - `password_hash` (VARCHAR, not used yet), `created_at`, `updated_at`
-
-- **ai_providers** — known AI providers (seeded at startup)
-  - `id` (BIGINT, PK), `provider_name` (VARCHAR, UNIQUE), `provider_type` (VARCHAR),
-  - `enabled` (BOOLEAN), `created_at`, `updated_at`
-  - Seeded records: OpenAI, Google Gemini, Anthropic Claude, DeepSeek
-
-- **conversations** — user conversations
-  - `id` (BIGINT, PK), `user_id` (FK → users), `title` (VARCHAR),
-  - `provider_id` (VARCHAR), `model` (VARCHAR), `created_at`, `updated_at`
-
-- **messages** — messages within conversations
-  - `id` (BIGINT, PK), `conversation_id` (FK → conversations), `sender_type` (ENUM: USER, ASSISTANT, SYSTEM),
-  - `content` (TEXT), `provider_id` (VARCHAR), `model` (VARCHAR), `created_at`
-
-- **conversation_providers** — join table tracking which providers participated in a conversation
-  - `id` (BIGINT, PK), `conversation_id` (FK), `provider_id` (FK → ai_providers),
-  - `first_used_at`, `message_count`
-  - Unique constraint on (conversation_id, provider_id)
-
-### New REST endpoints (for persistence verification)
-
-All endpoints require `X-User-Id` header (temporary dev mechanism; replaced by auth in Milestone 4).
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/providers` | List enabled AI providers |
-| GET | `/api/conversations` | List conversations (paginated) |
-| POST | `/api/conversations` | Create conversation |
-| GET | `/api/conversations/{id}` | Get conversation with messages |
-| PATCH | `/api/conversations/{id}` | Update title/provider/model |
-| DELETE | `/api/conversations/{id}` | Delete conversation |
-| POST | `/api/conversations/{id}/clear` | Clear messages, keep conversation |
-| GET | `/api/conversations/{id}/messages` | List messages (paginated) |
-| POST | `/api/conversations/{id}/messages` | Add message (USER, ASSISTANT, or SYSTEM) |
-
-### Database configuration
-
-Configure via environment variables (see `backend/.env.example`):
-
+Once running, verify backend health:
+```bash
+curl http://localhost:8080/api/health
 ```
-YTALKS_DB_HOST=localhost
-YTALKS_DB_PORT=3306
-YTALKS_DB_NAME=ytalks
-YTALKS_DB_USERNAME=root
-YTALKS_DB_PASSWORD=change_me
-```
+*Expected response:* `{"status":"UP","version":"0.4.0",...}`
 
-### MySQL setup (Windows)
+---
 
-```powershell
-# Install via winget
-winget install -e --id Oracle.MySQL --accept-source-agreements --accept-package-agreements
+### Step 5: Launch the Frontend
 
-# Initialize data directory (run as Administrator or use custom datadir)
-mkdir C:\mysql-data
-"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --initialize-insecure --datadir=C:\mysql-data
-
-# Start server
-Start-Process "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" -ArgumentList "--datadir=C:\mysql-data", "--console"
-
-# Set root password
-"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'change_me'; FLUSH PRIVILEGES;"
-
-# Create database (done automatically by app, but can be done manually)
-"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -u root -pchange_me -e "CREATE DATABASE IF NOT EXISTS ytalks;"
-```
-
-## Test
+In a separate terminal at the project root (`YTalks/`):
 
 ```bash
-npm test        # Milestone 1 browser regression — 94/94 checks
-npm run test:m2 # Milestone 2 backend + integration — 8 checks
+npm install
+npm start
 ```
 
-`tests/ui-smoke.mjs` drives real Chrome (via `puppeteer-core`, no bundled browser) through the whole
-product: auth, messaging, provider switching, both handoff paths, history, persistence across a
-reload, error/retry, theming, responsive breakpoints, accessibility basics, a WCAG contrast audit of
-both themes, branding/ambient-background verification, and console hygiene. It exits non-zero on
-the first failure and writes screenshots of each step to `tests/screenshots/`.
+The frontend will be available at:
+👉 **`http://localhost:4173`** (or `http://127.0.0.1:4173`)
 
-Current result: **94/94 checks passing** (see `docs/milestone-1.md`).
+---
 
-`tests/m2-smoke.mjs` verifies the Milestone 2 chain: `/api/health` answers directly over HTTP,
-the browser badge flips to "connected", and the badge degrades to "offline" without page errors
-when the backend is unreachable. It expects the backend jar to be running on
-`http://localhost:8080` (`cd backend && ./mvnw spring-boot:run`).
+## Environment Variables
 
-`node tests/debug-console.mjs` is a smaller diagnostic that only checks startup and console output.
+Configure these variables in `backend/.env` or in your system environment. **Never commit actual keys or secrets to version control.**
 
-## Layout
+| Variable | Description | Default / Example |
+| :--- | :--- | :--- |
+| `YTALKS_PORT` | Port the Spring Boot REST API listens on | `8080` |
+| `YTALKS_CORS_ALLOWED_ORIGINS` | Permitted frontend origins (comma-separated) | `http://localhost:4173,http://localhost:3000` |
+| `YTALKS_DB_HOST` | MySQL hostname | `localhost` |
+| `YTALKS_DB_PORT` | MySQL port | `3306` |
+| `YTALKS_DB_NAME` | Database schema name | `ytalks` |
+| `YTALKS_DB_USERNAME` | MySQL database username | `root` |
+| `YTALKS_DB_PASSWORD` | MySQL database password | `your_secure_password` |
+| `YTALKS_JWT_SECRET` | 256-bit+ random secret string for JWT signing | `your-secure-jwt-secret-key-at-least-32-chars` |
+| `YTALKS_JWT_EXPIRATION_MS` | JWT validity duration in milliseconds | `86400000` *(24 hours)* |
+| `YTALKS_OTP_DEV_MODE` | Prints OTP codes to backend console (dev only) | `true` |
+| `GEMINI_API_KEY` | Google Gemini API key from Google AI Studio | `your_gemini_api_key` |
+| `GEMINI_MODEL` | Active Gemini model identifier | `gemini-3.5-flash-lite` |
+| `GROQ_API_KEY` | Groq Cloud API key | `your_groq_api_key` |
+| `GROQ_MODEL` | Active Groq model identifier | `openai/gpt-oss-20b` |
+| `OPENROUTER_API_KEY` | OpenRouter API key *(optional for Gemma 4)* | `your_openrouter_api_key` |
+| `OPENROUTER_MODEL` | OpenRouter model identifier | `google/gemma-4-26b-a4b-it:free` |
 
-```
-frontend/
-  index.html              app shell: auth screen, dashboard, dialog roots, SVG icon sprite
-  css/tokens.css          design tokens, dark/light themes, per-provider accent hues
-  css/ambient.css         cinematic background: glows, grid, grain, vignette
-  css/base.css            reset, typography, focus rings, scrollbars, reduced-motion
-  css/components.css      buttons, fields, cards, menus, dialogs, toasts, states, skeletons
-  css/layout.css          auth, sidebar, chat, composer, provider menu, handoff, settings
-  js/utils.js             DOM helper, escaping, dates, rich text, focus trap, downloads
-  js/store.js             single state tree, selectors, subscribe, localStorage persistence
-  js/mock-data.js         mock user, providers, conversations, starter prompts
-  js/mock-ai.js           simulated streaming, topic-aware replies, error modes
-  js/actions.js           the only module allowed to mutate state (auth, chat, handoff, history)
-  js/backend.js           minimal REST client: /api/health fetch with timeout
-  js/ui.js                dialogs, toasts, popover menus
-  js/views/               auth, sidebar, chat, handoff-dialog, settings
-  js/app.js               bootstrap, render subscriptions, shortcuts, test surface
-tools/serve.js            static server
-backend/
-  src/main/java/com/ytalks/backend/
-    config/               CORS, request context, data initializer
-    controller/           Health, Conversation, AiProvider endpoints
-    dto/                  JSON request/response records
-    entity/               JPA entities (User, Conversation, Message, AiProvider, ConversationProvider)
-    exception/            Global error handling, API exceptions
-    repository/           Spring Data JPA repositories
-    service/              Business logic (User, Conversation, AiProvider services)
-tests/                    smoke tests, console diagnostic, generated screenshots
-```
+---
 
-State flows one way: a view calls an action → the action updates the store → the store notifies →
-the view re-renders. `window.__ytalks` exposes the store, actions and selectors for the tests.
+## API Overview
 
-## Not in this milestone (yet)
+The Spring Boot backend exposes a clean RESTful API:
 
-- ❌ Real authentication (login, registration, OTP, JWT) — Milestone 4
-- ❌ Real AI provider integration (OpenAI, Gemini, Claude, DeepSeek APIs) — Milestone 6
-- ❌ API keys/secrets management — later milestone
-- ❌ Cross-AI context transfer backend logic — later milestone
-- ❌ Image generation, payments, production deployment
+### Authentication (`/api/auth`)
+- `POST /api/auth/register` — Register a new user and generate a verification OTP.
+- `POST /api/auth/verify-otp` — Verify OTP code and receive a JWT Bearer token.
+- `POST /api/auth/resend-otp` — Request a fresh OTP for verification.
+- `POST /api/auth/login` — Authenticate existing credentials and issue a JWT.
+- `GET /api/auth/me` — Retrieve the current authenticated user's profile.
 
-The mock AI's replies, latency and failures are simulated in
-`frontend/js/mock-ai.js`; the real integration points arrive with later milestones.
+### Conversations (`/api/conversations`)
+- `GET /api/conversations` — Fetch all conversations belonging to the user.
+- `POST /api/conversations` — Create a new conversation thread.
+- `GET /api/conversations/{id}` — Fetch conversation details with message history.
+- `PATCH /api/conversations/{id}` — Update conversation title or preferred provider.
+- `DELETE /api/conversations/{id}` — Permanently remove a conversation.
+- `POST /api/conversations/{id}/clear` — Clear message history while keeping the thread.
+
+### Chat & AI Execution (`/api/chat`)
+- `POST /api/chat/{conversationId}/messages` — Submit a user message, trigger downstream AI generation with context continuity, and persist replies.
+- `GET /api/chat/providers` — List available and active AI models and their operational status.
+
+### Health & Monitoring
+- `GET /api/health` — Returns system uptime, database connectivity, and backend build version.
+
+---
+
+## Screenshots
+
+<!-- Add your screenshots by replacing the placeholder links below -->
+
+### 1. Main Chat Interface & Provider Selector
+![Main Chat Interface](docs/screenshots/chat-interface.png)
+*Ytalks signature Glassmorphism chat view with active model selection and conversation history.*
+
+---
+
+### 2. Cross-AI Handoff in Action
+![Cross-AI Handoff](docs/screenshots/cross-ai-handoff.png)
+*Switching from Gemini to Groq mid-conversation with contextual inheritance options.*
+
+---
+
+### 3. Authentication & OTP Verification
+![Authentication and OTP](docs/screenshots/auth-otp.png)
+*User registration with integrated email/console OTP verification.*
+
+---
+
+## Future Improvements
+
+- [ ] **Additional Provider Integrations**:
+  - Anthropic Claude (Claude 3.5 Sonnet / Haiku)
+  - OpenAI direct integration (GPT-4o / GPT-4o-mini)
+  - DeepSeek API (DeepSeek-V3 / R1)
+- [ ] **Streaming Responses (SSE)**: Real-time Server-Sent Events token streaming for zero-latency typewriter output.
+- [ ] **Document & Attachment Uploads**: Multimodal image, PDF, and source code context attachments.
+- [ ] **Export & Sharing**: Export full cross-model chat transcripts to Markdown, JSON, or PDF with provider attribution tags.
+- [ ] **Granular Context Trimming**: Visual token budget inspector allowing users to curate which historical messages are passed during cross-model handoffs.
+
+---
+
+## Author
+
+**Shubham Verma**
+- GitHub: [@your-github-username](https://github.com)
+- Project Repository: [YTalks](https://github.com/your-username/ytalks)
+
+---
+*Built with passion for seamless artificial intelligence interactions.*
